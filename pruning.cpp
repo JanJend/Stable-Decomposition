@@ -9,14 +9,14 @@
  * 
  */
 
-#ifndef PRUNING_CPP
-#define PRUNING_CPP
-
-#include <pruning_interface.hpp>
+#include "pruning_interface.hpp"
 
 namespace stable_decomposition {
 
 } // namespace stable_decomposition
 
-#endif // PRUNING_CPP
-
+#include <iostream>
+int main(){
+	std::cout << "Test" << std::endl;
+	return 0;
+}

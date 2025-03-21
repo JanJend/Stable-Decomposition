@@ -12,7 +12,7 @@
 #ifndef PRUNING_INTERFACE_HPP
 #define PRUNING_INTERFACE_HPP
 
-#include <pruning.hpp>
+#include "pruning.hpp"
 
 namespace stable_decomposition {
 

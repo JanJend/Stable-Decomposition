@@ -1,7 +1,7 @@
 This will keep track of what needs to be done
 
 Tasks:
-- Write Handbook for library (Jan) ETA: 22.3.
+- Write Handbook for library (Jan). Done
 - Implement MPFree in the library (Jan) ETA:
 - Architecture for Pruning (Fabian) ETA: 25.3.
 - Setting up VSCode and library (Havard) ETA: 24.3.

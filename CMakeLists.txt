@@ -12,9 +12,9 @@ set(CMAKE_DEBUG_POSTFIX _debug)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 #TODO Want to compile with -Wall -Wextra -Wpedantic -Werror; currently to many warnings
-set(CMAKE_CXX_FLAGS " -I${CMAKE_CURRENT_SOURCE_DIR}/Persistence-Algebra/include")
+set(CMAKE_CXX_FLAGS " -I\"${CMAKE_CURRENT_SOURCE_DIR}/Persistence-Algebra/include\"")
 set(CMAKE_CXX_FLAGS_RELEASE "-DNDEBUG -O3 -flto")
-# enable various sanity checks in the STL in libc++ and libstdc++, respectively. 
+# enable various sanity checks in the STL in libc++ and libstdc++, respectively.
 set(CMAKE_CXX_FLAGS_DEBUG "-D_LIBCPP_ENABLE_ASSERTIONS=1 -D_GLIBCXX_DEBUG -g")
 
 set(SRC_FILES

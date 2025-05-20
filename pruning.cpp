@@ -19,14 +19,16 @@ using degree_t = r2degree;
 using index_t = int; // Change to large enough int type.
 using Mat = GradedSparseMatrix<degree_t, index_t>;
 
+/* this is now a function of the presentation matrix (which we also ignore in this implementation)
 Mat submodule_intersection(Mat l, Mat r){
     assert(l.row_degrees == r.row_degrees);
     auto lr = l;
     lr.append_matrix(std::move(r));
     auto k = lr.graded_kernel();
     k.cull_columns(r.get_num_cols());
-    return l*k;//TODO implement
+    return l*k;
 };
+*/
 
 Mat submodule_sum(Mat l, Mat r){
     assert(l.row_degrees == r.row_degrees);
@@ -39,9 +41,11 @@ Mat submodule_sum(Mat l, Mat r){
 Mat image(Mat f, Mat U){// image of U \subseteq A under morphism f: A -> B
 
 };
+
 Mat preimage(Mat f, Mat U);// preimage of U \subseteq B under morphism f: A -> B
-vec<Mat> hom_space(Mat A, Mat B); // basis of Hom(A, B);
-Mat shifting_morphism(Mat A, double delta); // canonical morphism M -> M(2delta)
+
+// vec<Mat> hom_space(Mat A, Mat B); // basis of Hom(A, B); done by hom_space_basis
+Mat shifting_morphism(Mat A, double delta) = shifted_identity(A.row_degrees, std::pair{delta, delta}); // canonical morphism M -> M(2delta)
 Mat zero_submodule(Mat m); // 0 as submodule of M, likely unnecessary
 Mat all_submodule(Mat m); // M as submodule of M, likely unnecessary
 

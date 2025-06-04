@@ -26,6 +26,22 @@ Mat submodule_sum(Mat l, Mat r){
     return l;
 }
 
+// H: Simplifies the presentation of S as a submodule of M. Check correctness.
+Mat reduce_submodule(Mat S, Mat M){
+    auto M_copy = M;
+    M_copy.append_matrix(S);
+    M_copy.column_reduction_graded();
+    auto nzc = M_copy.column_reduction_graded();
+    int n = M.get_num_cols();
+    for(int i = nzc.size()-1; i >= 0; --i){
+        if(nzc[i] < n){
+            nzc.erase(nzc.begin()+i);
+        }
+    }
+    M_copy.delete_all_but_columns(nzc);
+    return M_copy;
+}
+
 Mat image(const Mat &f, const Mat &A, const Mat &B, const Mat &U){/// image of submodule U of A under morphism f: A -> B
     return f*U; //TODO not correct if submodules must be presented by minimal generating systems
 };

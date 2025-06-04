@@ -18,6 +18,7 @@ using namespace graded_linalg;
 using index_t = int; // Change to large enough int type.
 using Mat = R2GradedSparseMatrix<index_t>;
 
+
 Mat submodule_sum(Mat l, Mat r){
     assert(l.row_degrees == r.row_degrees);
     l.append_matrix(std::move(r));
@@ -46,7 +47,7 @@ Mat image(const Mat &f, const Mat &A, const Mat &B, const Mat &U){/// image of s
     return f*U; //TODO not correct if submodules must be presented by minimal generating systems
 };
 
-vec<Mat> hom_space(Mat A, Mat B){
+vec<Mat> homSpace(Mat A, Mat B){
     return hom_space_basis<r2degree, int, Mat>(A, B); // returns a basis of Hom(A, B) as a vector of matrices
 }; // basis of Hom(A, B); done by hom_space_basis
 
@@ -55,10 +56,22 @@ Mat shifting_morphism(Mat A, double delta){
     return shifted_identity<r2degree, Mat>(A.row_degrees, shift);
 }; // canonical morphism M -> M(2delta)
 
-Mat zero_submodule(const Mat &m); // 0 as submodule of M, likely unnecessary
-Mat all_submodule(const Mat &m); // M as submodule of M, likely unnecessary
+Mat zero_submodule(const Mat &m){
+    Mat zero(0, m.get_num_rows()); // Create a zero submodule of M
+    zero.row_degrees = m.row_degrees; // Ensure the row degrees match
+    zero.col_degrees = vec<r2degree>(); // No columns, so no degrees 
+    zero.data = vec<vec<int>>(); // No data, so empty vector
+    return zero;
+}; // 0 as submodule of M, likely unnecessary
 
-/// Return true of im M is contained in im N TO-DO: Relations implicitely ignored.
+Mat all_submodule(const Mat &m){
+    Mat Id(m.get_num_cols(), m.get_num_cols(), "Identity");
+    Id.row_degrees = m.row_degrees; // Ensure the row degrees match
+    Id.col_degrees = m.col_degrees; // Ensure the column degrees match
+    return Id;
+}; // M as submodule of M, likely unnecessary
+
+/// Return true of im M is contained in im N TO-DO: Is this correct? Relations implicitely ignored.
 bool image_contained_in_image(const Mat &M, const Mat &N){
     auto N_copy = N; 
     int threshold =  N.get_num_cols();
@@ -87,22 +100,28 @@ auto pruning_pair(const Mat &M, const double delta){
     Mat M2d = M;
     M2d.shift({delta, delta});
     // Build a basis Γ for Hom(M, M(2δ)).
-    vec<Mat> G; //TODO: make G a basis of hom_space(M, N);
-    Mat can = shifting_morphism(M2d, delta); // TODO: build the canonical morphism M -> M(2d)
-
+    vec<Mat> G = homSpace(M, M2d); 
+    Mat can = shifting_morphism(M2d, delta);
     // Build the module I from the pruning pair
     Mat I = all_submodule(M);
     for(;;){
         auto I_new = all_submodule(M);
-        for(auto &&f : G)
+        for(const auto& f : G){
             // (f \circ I_new)^{-1}(can*I);
-            I_new = M.submodule_intersection(I_new, f.inverse_image(M2d, can * I));
-
-        if(present_same_submodule(M, I_new, I)) //TODO implement
+            auto I_shifted = can * I_new; 
+            // TODO: The above just shifts the degrees of the generators, so we should do that directly and not multiply.
+            auto f_copy = f;
+            I_new = M.submodule_intersection(I_new, f_copy.inverse_image(M2d, can * I));
+        }
+        if(present_same_submodule(M, I_new, I)) 
             break;
         std::swap(I, I_new);
     }
-    Mat can_I; //TODO: the canonical morphism I -> I(2d)
+    // Mat can_I; //TODO: the canonical morphism I -> I(2d)
     // Build the module K from the pruning pair
+    return I; // Return the pruning pair (I, K)
 }
+
+
+
 } // namespace stable_decomposition

@@ -12,6 +12,7 @@
 #include "grlina/graded_matrix.hpp"
 #include <grlina/graded_linalg.hpp>
 #include <algorithm>
+#include <filesystem>
 namespace stable_decomposition {
 
 using namespace graded_linalg;
@@ -48,12 +49,21 @@ Mat image(const Mat &f, const Mat &A, const Mat &B, const Mat &U){/// image of s
 };
 
 vec<Mat> homSpace(Mat A, Mat B){
+    //H: why does it allow me to compute rows forward when A is const where I'm calling homSpace??
+	A.compute_rows_forward();
     return hom_space_basis<r2degree, int, Mat>(A, B); // returns a basis of Hom(A, B) as a vector of matrices
 }; // basis of Hom(A, B); done by hom_space_basis
 
 Mat shifting_morphism(Mat A, double delta){
     r2degree shift = {delta, delta};
-    return shifted_identity<r2degree, Mat>(A.row_degrees, shift);
+    Mat result(A.get_num_rows(),A.get_num_rows(), "Identity");
+    result.col_degrees = A.row_degrees;
+    result.row_degrees = A.row_degrees;
+    for(auto& g : result.row_degrees){
+        g = g - shift;
+    }
+    return result;
+    //return shifted_identity<r2degree, Mat>(A.row_degrees, shift);
 }; // canonical morphism M -> M(2delta)
 
 Mat zero_submodule(const Mat &m){
@@ -65,9 +75,9 @@ Mat zero_submodule(const Mat &m){
 }; // 0 as submodule of M, likely unnecessary
 
 Mat all_submodule(const Mat &m){
-    Mat Id(m.get_num_cols(), m.get_num_cols(), "Identity");
+    Mat Id(m.get_num_rows(), m.get_num_rows(), "Identity");
     Id.row_degrees = m.row_degrees; // Ensure the row degrees match
-    Id.col_degrees = m.col_degrees; // Ensure the column degrees match
+    Id.col_degrees = m.row_degrees; // Ensure the column degrees match
     return Id;
 }; // M as submodule of M, likely unnecessary
 
@@ -104,17 +114,18 @@ auto pruning_pair(const Mat &M, const double delta){
     Mat can = shifting_morphism(M2d, delta);
     // Build the module I from the pruning pair
     Mat I = all_submodule(M);
-    for(;;){
+    for(int i = 1; i <= 1; ++i){
         auto I_new = all_submodule(M);
         for(const auto& f : G){
             // (f \circ I_new)^{-1}(can*I);
             auto I_shifted = can * I_new; 
             // TODO: The above just shifts the degrees of the generators, so we should do that directly and not multiply.
             auto f_copy = f;
-            I_new = M.submodule_intersection(I_new, f_copy.inverse_image(M2d, can * I));
+            I_new = M.submodule_intersection(I_new, f_copy.inverse_image(M2d, I_shifted));
         }
-        if(present_same_submodule(M, I_new, I)) 
+        if(present_same_submodule(M, I_new, I)){
             break;
+        }
         std::swap(I, I_new);
     }
     // Mat can_I; //TODO: the canonical morphism I -> I(2d)
@@ -122,6 +133,14 @@ auto pruning_pair(const Mat &M, const double delta){
     return I; // Return the pruning pair (I, K)
 }
 
-
-
 } // namespace stable_decomposition
+
+int main(){
+    std::filesystem::path current_path = std::filesystem::path(__FILE__);
+	std::filesystem::path example_path1 = current_path / "../Persistence-Algebra/test_presentations/toy_example_1.scc";
+    using namespace stable_decomposition;
+    R2GradedSparseMatrix<int> M(example_path1.string());
+    Mat I = pruning_pair(M, 1);
+    //I.print_graded();
+    return 0;
+}

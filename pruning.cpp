@@ -29,7 +29,7 @@ Mat submodule_sum(Mat l, Mat r){
 }
 
 // H: Simplifies the presentation of S as a submodule of M. Check correctness.
-Mat reduce_submodule(Mat S, Mat M){
+Mat reduce_submodule(Mat M, Mat S){
     auto M_copy = M;
     M_copy.append_matrix(S);
     M_copy.column_reduction_graded();
@@ -108,29 +108,43 @@ bool present_same_submodule(const Mat &M, const Mat &A, const Mat &B){
 auto pruning_pair(const Mat &M, const double delta){
     // Build a presentation matrix for M(2δ)
     Mat M2d = M;
-    M2d.shift({delta, delta});
+    // H: Shift seems to work by shifting the grades up, which gives the opposite of the positively shifted module
+    M2d.shift({-delta, -delta});
     // Build a basis Γ for Hom(M, M(2δ)).
     vec<Mat> G = homSpace(M, M2d); 
-    Mat can = shifting_morphism(M2d, delta);
+    Mat can = shifting_morphism(M, delta);
     // Build the module I from the pruning pair
-    Mat I = all_submodule(M);
-    for(int i = 1; i <= 1; ++i){
-        auto I_new = all_submodule(M);
+    // H: I is not in use right now, since we're not checking if I has been changed.
+    Mat I_new = all_submodule(M);
+    // H: Change 5 to something less arbitrary
+    for(int i = 1; i <= 5; ++i){
+        //auto I_new = all_submodule(M);
         for(const auto& f : G){
-            // (f \circ I_new)^{-1}(can*I);
-            auto I_shifted = can * I_new; 
+            // (f \circ I_new)^{-1}(can*I); This is implemented now.
+            auto I_shifted = can * I_new;
             // TODO: The above just shifts the degrees of the generators, so we should do that directly and not multiply.
             auto f_copy = f;
-            I_new = M.submodule_intersection(I_new, f_copy.inverse_image(M2d, I_shifted));
+            auto foI = f_copy * I_new;
+            // H: I didn't get inverse_image to work, so I did it in here instead.
+            foI.append_matrix(I_shifted);
+            foI.append_matrix(M);
+            auto K = foI.graded_kernel();
+            K.cull_columns(I_new.get_num_cols(), false);
+            K.column_reduction_graded();
+            I_new = I_new * K;
+            // H: without reduce_submodule, this gets suuuper slow
+            I_new = reduce_submodule(M, I_new);
+            //I_new = M.submodule_intersection(I_new, f_copy.inverse_image(M2d, I_shifted));
         }
+        /*
         if(present_same_submodule(M, I_new, I)){
             break;
         }
-        std::swap(I, I_new);
+        std::swap(I, I_new);*/
     }
     // Mat can_I; //TODO: the canonical morphism I -> I(2d)
     // Build the module K from the pruning pair
-    return I; // Return the pruning pair (I, K)
+    return I_new; // Return the pruning pair (I, K)
 }
 
 } // namespace stable_decomposition
@@ -140,7 +154,8 @@ int main(){
 	std::filesystem::path example_path1 = current_path / "../Persistence-Algebra/test_presentations/toy_example_1.scc";
     using namespace stable_decomposition;
     R2GradedSparseMatrix<int> M(example_path1.string());
+    M.print_graded();
     Mat I = pruning_pair(M, 1);
-    //I.print_graded();
+    I.print_graded();
     return 0;
 }

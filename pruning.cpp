@@ -20,6 +20,21 @@ using index_t = int; // Change to large enough int type.
 using Mat = R2GradedSparseMatrix<index_t>;
 
 
+Mat zero_submodule(const Mat &m){
+    Mat zero(0, m.get_num_rows()); // Create a zero submodule of M
+    zero.row_degrees = m.row_degrees; // Ensure the row degrees match
+    zero.col_degrees = vec<r2degree>(); // No columns, so no degrees 
+    zero.data = vec<vec<int>>(); // No data, so empty vector
+    return zero;
+}; // 0 as submodule of M, likely unnecessary
+
+Mat all_submodule(const Mat &m){
+    Mat Id(m.get_num_rows(), m.get_num_rows(), "Identity");
+    Id.row_degrees = m.row_degrees; // Ensure the row degrees match
+    Id.col_degrees = m.row_degrees; // Ensure the column degrees match
+    return Id;
+}; // M as submodule of M, likely unnecessary
+
 Mat submodule_sum(Mat l, Mat r){
     assert(l.row_degrees == r.row_degrees);
     l.append_matrix(std::move(r));
@@ -31,6 +46,7 @@ Mat submodule_sum(Mat l, Mat r){
 // H: Simplifies the presentation of S as a submodule of M. Check correctness.
 Mat reduce_submodule(Mat M, Mat S){
     auto M_copy = M;
+    S.sort_columns_lexicographically();
     M_copy.append_matrix(S);
     M_copy.column_reduction_graded();
     auto nzc = M_copy.column_reduction_graded();
@@ -39,6 +55,9 @@ Mat reduce_submodule(Mat M, Mat S){
         if(nzc[i] < n){
             nzc.erase(nzc.begin()+i);
         }
+    }
+    if(nzc.size() == 0){
+        return zero_submodule(M);
     }
     M_copy.delete_all_but_columns(nzc);
     return M_copy;
@@ -66,21 +85,6 @@ Mat shifting_morphism(Mat A, double delta){
     //return shifted_identity<r2degree, Mat>(A.row_degrees, shift);
 }; // canonical morphism M -> M(2delta)
 
-Mat zero_submodule(const Mat &m){
-    Mat zero(0, m.get_num_rows()); // Create a zero submodule of M
-    zero.row_degrees = m.row_degrees; // Ensure the row degrees match
-    zero.col_degrees = vec<r2degree>(); // No columns, so no degrees 
-    zero.data = vec<vec<int>>(); // No data, so empty vector
-    return zero;
-}; // 0 as submodule of M, likely unnecessary
-
-Mat all_submodule(const Mat &m){
-    Mat Id(m.get_num_rows(), m.get_num_rows(), "Identity");
-    Id.row_degrees = m.row_degrees; // Ensure the row degrees match
-    Id.col_degrees = m.row_degrees; // Ensure the column degrees match
-    return Id;
-}; // M as submodule of M, likely unnecessary
-
 /// Return true of im M is contained in im N TO-DO: Is this correct? Relations implicitely ignored.
 bool image_contained_in_image(const Mat &M, const Mat &N){
     auto N_copy = N; 
@@ -105,7 +109,7 @@ bool present_same_submodule(const Mat &M, const Mat &A, const Mat &B){
     return image_contained_in_image(B, MA) && image_contained_in_image(A, MB);
 }
 /// Computes a pruning pair (I,K) of a module M given by presentation, following Bjerkevik 2025, Lemma 5.2
-auto pruning_pair(const Mat &M, const double delta){
+std::vector<Mat> pruning_pair(const Mat &M, const double delta){
     // Build a presentation matrix for M(2δ)
     Mat M2d = M;
     // H: Shift seems to work by shifting the grades up, which gives the opposite of the positively shifted module
@@ -114,48 +118,68 @@ auto pruning_pair(const Mat &M, const double delta){
     vec<Mat> G = homSpace(M, M2d); 
     Mat can = shifting_morphism(M, delta);
     // Build the module I from the pruning pair
-    // H: I is not in use right now, since we're not checking if I has been changed.
-    Mat I_new = all_submodule(M);
-    // H: Change 5 to something less arbitrary
-    for(int i = 1; i <= 5; ++i){
+    Mat I = all_submodule(M);
+    while(true){
+        Mat I_new = I;
         //auto I_new = all_submodule(M);
         for(const auto& f : G){
             // (f \circ I_new)^{-1}(can*I); This is implemented now.
-            auto I_shifted = can * I_new;
-            // TODO: The above just shifts the degrees of the generators, so we should do that directly and not multiply.
-            auto f_copy = f;
-            auto foI = f_copy * I_new;
-            // H: I didn't get inverse_image to work, so I did it in here instead.
-            foI.append_matrix(I_shifted);
-            foI.append_matrix(M);
-            auto K = foI.graded_kernel();
-            K.cull_columns(I_new.get_num_cols(), false);
-            K.column_reduction_graded();
-            I_new = I_new * K;
+            Mat foI = f * I_new;
+            // H: Using I_new instead of I_shifted = can * I_new; here is probably bad form, since the row grades
+            // of I_new are wrong. But the row grades don't matter, so this works (for now)
+            // H: Added extra argument to get the function to work. Should find better solution.
+            Mat inv = foI.inverse_image_copy(M2d, I_new, foI);
+            //foI.append_matrix(I_new);
+            //foI.append_matrix(M2d);
+            //Mat K = foI.graded_kernel();
+            //K.cull_columns(I_new.get_num_cols(), false);
+            //K.column_reduction_graded();
             // H: without reduce_submodule, this gets suuuper slow
-            I_new = reduce_submodule(M, I_new);
+            I_new = reduce_submodule(M, I_new * inv);
             //I_new = M.submodule_intersection(I_new, f_copy.inverse_image(M2d, I_shifted));
         }
-        /*
         if(present_same_submodule(M, I_new, I)){
             break;
         }
-        std::swap(I, I_new);*/
+        std::swap(I, I_new);
     }
     // Mat can_I; //TODO: the canonical morphism I -> I(2d)
+
     // Build the module K from the pruning pair
-    return I_new; // Return the pruning pair (I, K)
+    Mat I_shifted = can * I;
+    Mat K = zero_submodule(M);
+    while(true){
+        Mat K_new = K;
+        //auto I_new = all_submodule(M);
+        for(const auto& f : G){
+            Mat K2 = K_new;
+            K_new = I * I_shifted.inverse_image_copy(M2d, f * K_new, I_shifted);
+            // This takes the sum with K from the previous step
+            K_new.append_matrix(K2);
+            K_new = reduce_submodule(M, K_new);
+        }
+        if(present_same_submodule(M, K_new, K)){
+            break;
+        }
+        std::swap(K, K_new);
+    }
+    std::vector<Mat> pruning = {I, K};
+    return pruning; // Return the pruning pair (I, K)
 }
 
 } // namespace stable_decomposition
 
 int main(){
     std::filesystem::path current_path = std::filesystem::path(__FILE__);
-	std::filesystem::path example_path1 = current_path / "../Persistence-Algebra/test_presentations/toy_example_1.scc";
+    //std::filesystem::path example_path1 = current_path / "../Persistence-Algebra/test_presentations/function_delaunay_7_2.scc";
+	std::filesystem::path example_path1 = current_path / "../Persistence-Algebra/test_presentations/pruning_ex_1.scc";
     using namespace stable_decomposition;
     R2GradedSparseMatrix<int> M(example_path1.string());
     M.print_graded();
-    Mat I = pruning_pair(M, 1);
-    I.print_graded();
+    std::vector<Mat> pruning = pruning_pair(M, 1);
+    //print I
+    pruning[0].print_graded();
+    //print K
+    pruning[1].print_graded();
     return 0;
 }

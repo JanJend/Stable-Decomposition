@@ -175,7 +175,7 @@ int main(){
     std::filesystem::path example_path1 = current_path / "../Persistence-Algebra/test_presentations/full_rips_size_1_instance_5_min_pres.scc";
     std::filesystem::path example_path2 = current_path / "../Persistence-Algebra/test_presentations/function_delaunay_7_2.scc";
     using namespace stable_decomposition;
-    R2GradedSparseMatrix<int> M(example_path1.string());
+    R2GradedSparseMatrix<int> M(example_path2.string());
     M.print_graded();
     std::vector<Mat> pruning = pruning_pair(M, 1);
     //print I

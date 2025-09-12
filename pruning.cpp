@@ -179,6 +179,7 @@ int main(){
     M.print_graded();
     std::vector<Mat> pruning = pruning_pair(M, 1);
     //print I
+    std::cout << "Pruning pair (I, K):" << std::endl;
     pruning[0].print_graded();
     //print K
     pruning[1].print_graded();

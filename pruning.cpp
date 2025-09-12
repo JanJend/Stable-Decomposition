@@ -9,7 +9,7 @@
  *
  */
 
-#include "grlina/graded_matrix.hpp"
+// #include "grlina/graded_matrix.hpp"
 #include <grlina/graded_linalg.hpp>
 #include <algorithm>
 #include <filesystem>
@@ -128,7 +128,7 @@ std::vector<Mat> pruning_pair(const Mat &M, const double delta){
             // H: Using I_new instead of I_shifted = can * I_new; here is probably bad form, since the row grades
             // of I_new are wrong. But the row grades don't matter, so this works (for now)
             // H: Added extra argument to get the function to work. Should find better solution.
-            Mat inv = foI.inverse_image_copy(M2d, I_new, foI);
+            Mat inv = foI.inverse_image_copy(M2d, I_new);
             //foI.append_matrix(I_new);
             //foI.append_matrix(M2d);
             //Mat K = foI.graded_kernel();
@@ -153,7 +153,7 @@ std::vector<Mat> pruning_pair(const Mat &M, const double delta){
         //auto I_new = all_submodule(M);
         for(const auto& f : G){
             Mat K2 = K_new;
-            K_new = I * I_shifted.inverse_image_copy(M2d, f * K_new, I_shifted);
+            K_new = I * I_shifted.inverse_image_copy(M2d, f * K_new);
             // This takes the sum with K from the previous step
             K_new.append_matrix(K2);
             K_new = reduce_submodule(M, K_new);
@@ -170,9 +170,10 @@ std::vector<Mat> pruning_pair(const Mat &M, const double delta){
 } // namespace stable_decomposition
 
 int main(){
-    std::filesystem::path current_path = std::filesystem::path(__FILE__);
-    //std::filesystem::path example_path1 = current_path / "../Persistence-Algebra/test_presentations/function_delaunay_7_2.scc";
-	std::filesystem::path example_path1 = current_path / "../Persistence-Algebra/test_presentations/pruning_ex_1.scc";
+    std::filesystem::path file_path = std::filesystem::path(__FILE__);
+    std::filesystem::path current_path = file_path.parent_path();
+    std::filesystem::path example_path1 = current_path / "../Persistence-Algebra/test_presentations/full_rips_size_1_instance_5_min_pres.scc";
+    std::filesystem::path example_path2 = current_path / "../Persistence-Algebra/test_presentations/function_delaunay_7_2.scc";
     using namespace stable_decomposition;
     R2GradedSparseMatrix<int> M(example_path1.string());
     M.print_graded();

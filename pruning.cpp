@@ -171,7 +171,7 @@ std::vector<Mat> pruning_pair(const Mat &M, const double delta){
 
 int main(){
     std::string example_path1 = "Persistence-Algebra/test_presentations/full_rips_size_1_instance_5_min_pres.scc";
-    std::string example_path2 = "Persistence-Algebra/test_presentations/function_delaunay_7_2.scc";
+    std::string example_path2 = "test_presentations_pruning/test5.scc";
     using namespace stable_decomposition;
     R2GradedSparseMatrix<int> M(example_path2);
     M.print_graded();

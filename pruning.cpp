@@ -170,12 +170,10 @@ std::vector<Mat> pruning_pair(const Mat &M, const double delta){
 } // namespace stable_decomposition
 
 int main(){
-    std::filesystem::path file_path = std::filesystem::path(__FILE__);
-    std::filesystem::path current_path = file_path.parent_path();
-    std::filesystem::path example_path1 = current_path / "../Persistence-Algebra/test_presentations/full_rips_size_1_instance_5_min_pres.scc";
-    std::filesystem::path example_path2 = current_path / "../Persistence-Algebra/test_presentations/function_delaunay_7_2.scc";
+    std::string example_path1 = "Persistence-Algebra/test_presentations/full_rips_size_1_instance_5_min_pres.scc";
+    std::string example_path2 = "test_presentations_pruning/test5.scc";
     using namespace stable_decomposition;
-    R2GradedSparseMatrix<int> M(example_path2.string());
+    R2GradedSparseMatrix<int> M(example_path2);
     M.print_graded();
     std::vector<Mat> pruning = pruning_pair(M, 0.01);
     //print I

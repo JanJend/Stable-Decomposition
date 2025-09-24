@@ -177,7 +177,7 @@ int main(){
     using namespace stable_decomposition;
     R2GradedSparseMatrix<int> M(example_path2.string());
     M.print_graded();
-    std::vector<Mat> pruning = pruning_pair(M, 1);
+    std::vector<Mat> pruning = pruning_pair(M, 0.01);
     //print I
     std::cout << "Pruning pair (I, K):" << std::endl;
     pruning[0].print_graded();

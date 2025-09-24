@@ -9,16 +9,11 @@
  *
  */
 
-// #include "grlina/graded_matrix.hpp"
-#include <grlina/graded_linalg.hpp>
+#include "pruning.hpp"
 #include <algorithm>
-#include <filesystem>
 namespace stable_decomposition {
 
 using namespace graded_linalg;
-using index_t = int; // Change to large enough int type.
-using Mat = R2GradedSparseMatrix<index_t>;
-
 
 Mat zero_submodule(const Mat &m){
     Mat zero(0, m.get_num_rows()); // Create a zero submodule of M
@@ -168,18 +163,3 @@ std::vector<Mat> pruning_pair(const Mat &M, const double delta){
 }
 
 } // namespace stable_decomposition
-
-int main(){
-    std::string example_path1 = "Persistence-Algebra/test_presentations/full_rips_size_1_instance_5_min_pres.scc";
-    std::string example_path2 = "test_presentations_pruning/test5.scc";
-    using namespace stable_decomposition;
-    R2GradedSparseMatrix<int> M(example_path2);
-    M.print_graded();
-    std::vector<Mat> pruning = pruning_pair(M, 1);
-    //print I
-    std::cout << "Pruning pair (I, K):" << std::endl;
-    pruning[0].print_graded();
-    //print K
-    pruning[1].print_graded();
-    return 0;
-}

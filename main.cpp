@@ -1,4 +1,4 @@
-#include "pruning.hpp"
+#include "pruning.cpp"
 #include <string>
 int main() {
   using namespace graded_linalg;
@@ -6,9 +6,9 @@ int main() {
   std::string example_path1 = "Persistence-Algebra/test_presentations/"
                               "full_rips_size_1_instance_5_min_pres.scc";
   std::string example_path2 = "tests/test5.scc";
-  std::string example_path3 = "/home/wsljan/MP-Workspace/data/CompPer25/"
+  //std::string example_path3 = "/home/wsljan/MP-Workspace/data/CompPer25/"
                               "minpres_dim_1_torus_1000_3_0.10.scc";
-  R2GradedSparseMatrix<int> M(example_path3);
+  R2GradedSparseMatrix<int> M(example_path2);
   // M.print_graded();
   std::vector<Mat> pruning = pruning_pair(M, 1);
   // print I

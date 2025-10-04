@@ -225,6 +225,7 @@ bool present_same_submodule(const Mat &M, const Mat &A, const Mat &B) {
 }
 
 void print_progress(int iteration_I, size_t current, size_t total) {
+  if(total != 0){
   int progress = (current * 100) / total;
   int bars = progress / 5; // 20 segments (100/5)
 
@@ -233,6 +234,7 @@ void print_progress(int iteration_I, size_t current, size_t total) {
     std::cout << (i < bars ? "█" : " ");
   }
   std::cout << "] " << progress << "%" << std::flush;
+  }
 }
 
 
@@ -255,11 +257,11 @@ std::vector<Mat> pruning_pair(Mat &M, const double delta) {
   while (true) {
     Mat I_new = I;
     assert(I.get_num_rows() == M.get_num_rows());
+    assert(I.row_degrees == M.row_degrees);
     // auto I_new = all_submodule(M);
     for (size_t idx = 0; idx < G.size(); ++idx) {
       print_progress(iteration_I, idx, G.size());
       const auto &f = G[idx];
-
       // (f \circ I_new)^{-1}(can*I)
       Mat foI = f * I_new;
       Mat I_shifted = I_new;
@@ -271,7 +273,6 @@ std::vector<Mat> pruning_pair(Mat &M, const double delta) {
       auto inv = foI.inverse_image_copy(M2d, I_shifted);
       //  H: without reduce_submodule, this gets suuuper slow
       I_new = reduce_submodule(M, I_new * inv);
-
       // J: Obsolete?
       // foI.append_matrix(I_new);
       // foI.append_matrix(M2d);
@@ -289,7 +290,8 @@ std::vector<Mat> pruning_pair(Mat &M, const double delta) {
     std::swap(I, I_new);
     iteration_I++;
   }
-  // Mat can_I; //TODO: the canonical morphism I -> I(2d)
+  // Mat can_I; //TODO: 
+  // the canonical morphism I -> I(2d)
   auto I_shifted = I;
   I_shifted.shift_generators(std::pair<double, double>(delta, delta));
   // Build the module K from the pruning pair
@@ -303,7 +305,9 @@ std::vector<Mat> pruning_pair(Mat &M, const double delta) {
       print_progress(iteration_K, idx, G.size());
       const auto &f = G[idx];
       Mat K2 = K_new;
-      K_new = I * I_shifted.inverse_image_copy(M2d, f * K_new);
+      auto f_K_new = f * K_new;
+      K_new = I_shifted.inverse_image_copy(M2d, f_K_new);
+      K_new = I * K_new;
       // This takes the sum with K from the previous step
       K_new.append_matrix(K2);
       K_new = reduce_submodule(M, K_new);
@@ -345,12 +349,12 @@ int main(int argc, char** argv){
 
     if (argc != 2) {
         std::cerr << "Usage: " << argv[0] << " <file_path>" << std::endl;
-        filepath = ex8;
+        filepath = torus;
     } else {
         filepath = argv[1];
     }
     
-    double delta = 0.1;
+    double delta = 0.01;
     std::filesystem::path input_path(filepath);
     std::cout << "Computing the pruning of " << input_path << std::endl;
 
@@ -362,16 +366,17 @@ int main(int argc, char** argv){
     
     M.sort_columns_lexicographically();
     M.sort_rows_lexicographically();
-    M.print_graded();
+    // M.print_graded();
     std::vector<Mat> pruning = pruning_pair(M, delta);
     //print I
     //  std::cout << "Pruning pair (I, K):" << std::endl;
-    pruning[0].print_graded();
+    // pruning[0].print_graded();
     //print K
-    pruning[1].print_graded();
+    // pruning[1].print_graded();
 
     M.append_matrix(pruning[1]);
     Mat Pru_M = pruning[0].presentation_of_submodule(M);
+    Pru_M.sort_columns_lexicographically();
     Pru_M.semi_minimize();
     std::ofstream output_file(output_path);
     if (!output_file.is_open()) {

@@ -1,23 +1,37 @@
-#include "pruning.cpp"
-#include <string>
-int main() {
-  using namespace graded_linalg;
-  using namespace stable_decomposition;
-  std::string example_path1 = "Persistence-Algebra/test_presentations/"
-                              "full_rips_size_1_instance_5_min_pres.scc";
-  std::string example_path2 = "tests/test5.scc";
-  //std::string example_path3 = "/home/wsljan/MP-Workspace/data/CompPer25/"
-                              "minpres_dim_1_torus_1000_3_0.10.scc";
-  R2GradedSparseMatrix<int> M(example_path2);
-  // M.print_graded();
-  std::vector<Mat> pruning = pruning_pair(M, 1);
-  // print I
-  std::cout << "Pruning pair (I, K):" << std::endl;
-  std::cout << pruning[0].get_num_cols() << " generators of I" << std::endl;
 
-  std::cout << pruning[1].get_num_cols() << " generators of K" << std::endl;
-  // pruning[0].print_graded();
-  // print K
-  // pruning[1].print_graded();
-  return 0;
+#include "include/pruning.hpp"
+#include "include/utils.hpp"
+#include <iostream>
+#include <fstream>
+
+using namespace graded_linalg;
+using namespace stable_decomposition;
+
+int main(int argc, char** argv) {
+    auto opts = parse_arguments(argc, argv);
+    
+    Mat M(opts.input_file);
+    M.sort_columns_lexicographically();
+    M.sort_rows_lexicographically();
+    double delta = get_delta(opts.delta, M);
+    
+    std::cout << "Computing pruning of " << opts.input_file 
+              << " (delta=" << delta << ")" << std::endl;
+    
+    Mat Pru_M = pruning(M, delta);
+    
+    if (!opts.no_output) {
+        std::string output_path = generate_output_path(opts.input_file, delta);
+        std::ofstream output_file(output_path);
+        
+        if (!output_file.is_open()) {
+            std::cerr << "Error: Unable to open " << output_path << std::endl;
+            return 1;
+        }
+        
+        Pru_M.to_stream(output_file);
+        std::cout << "Saved to: " << output_path << std::endl;
+    }
+    
+    return 0;
 }

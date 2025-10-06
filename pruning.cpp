@@ -1,21 +1,16 @@
 /**
  * @file pruning.cpp
- * @author Jan Jendrysiak and Fabian Lenzen
+ * @author Havard Bjerkevik, Jan Jendrysiak, and Fabian Lenzen
  * @brief
- * @version 0.1
- * @date 2025-03-13
+ * @version 0.2
+ * @date 2025-10-6
  *
  * @copyright
  *
  */
 
-#include "pruning.hpp"
-#include "grlina/sparse_matrix.hpp"
-#include <algorithm>
-#include <atomic>
-#include <chrono>
-#include <thread>
-#include <filesystem>
+#include "include/pruning.hpp"
+
 namespace stable_decomposition {
 
 using namespace graded_linalg;
@@ -130,7 +125,7 @@ vec<Mat> End_2d_0 (Mat &M, double delta) {
   }
   matrix_reduction(End_0, End_2d);
   auto dim_quotient = End_2d.size();
-  std::cout << "dim End_2d_0 = " << dim_quotient << " vs dim End_2d = " << dim_or << std::endl;
+  std::cout << "dim End_2d_0 = " << dim_quotient << " vs dim End_2d = " << dim_or << " and dim End_0 = " << End_0.size() << std::endl;
   return End_2d;
 }
 
@@ -327,66 +322,78 @@ std::vector<Mat> pruning_pair(Mat &M, const double delta) {
   return pruning; // Return the pruning pair (I, K)
 }
 
-} // namespace stable_decomposition
+Mat pruning(Mat &M, const double delta) {
+  auto IK = pruning_pair(M, delta);
+  Mat I = IK[0];
+  Mat K = IK[1];
+  M.append_matrix(K);
+  Mat Pru_M = I.presentation_of_submodule(M);
+  Pru_M.sort_columns_lexicographically();
+  Pru_M.sort_rows_lexicographically();
+  Pru_M.minimize();
+  return Pru_M;
+} 
 
-std::string insert_suffix_before_extension(const std::string& filepath, const std::string& suffix) {
-    std::filesystem::path path(filepath);
-    std::string stem = path.stem().string();             // filename without extension
-    std::string extension = path.extension().string();   // e.g., ".txt"
-    std::filesystem::path new_path = path.parent_path() / (stem + suffix + extension);
-    return new_path.string();
-}
-
-
-int main(int argc, char** argv){
-    std::string ex1 = "Persistence-Algebra/test_presentations/full_rips_size_1_instance_5_min_pres.scc";
-    std::string ex2 = "tests/test5.scc";
-    std::string torus = "tests/torus3_largestcomp.scc";
-    std::string comp1 = "Persistence-Algebra/test_presentations/torus_100_0.10_dim1_decomposition/comp1.scc";
-    std::string ex8 = "tests/test8.scc";
-    std::string ex9 = "tests/test9.scc";
-    std::string filepath;
-
-    if (argc != 2) {
-        std::cerr << "Usage: " << argv[0] << " <file_path>" << std::endl;
-        filepath = torus;
-    } else {
-        filepath = argv[1];
+std::optional<double> calculate_delta_from_matrix(const Mat& M) {
+    const vec<r2degree>& col_degrees = M.col_degrees;
+    const vec<r2degree>& row_degrees = M.row_degrees;
+    
+    if (col_degrees.empty() && row_degrees.empty()) {
+        return std::nullopt;
     }
     
-    double delta = 0.05;
-    std::filesystem::path input_path(filepath);
-    std::cout << "Computing the pruning of " << input_path << std::endl;
-
-    std::string modified_path = insert_suffix_before_extension(filepath, "_pru");
-    std::filesystem::path output_path(modified_path);
+    // Initialize with first available degree
+    double min_x, max_x, min_y, max_y;
     
-    using namespace stable_decomposition;
-    R2GradedSparseMatrix<int> M(filepath);
-    
-    M.sort_columns_lexicographically();
-    M.sort_rows_lexicographically();
-    // M.print_graded();
-    std::vector<Mat> pruning = pruning_pair(M, delta);
-    //print I
-    //  std::cout << "Pruning pair (I, K):" << std::endl;
-    // pruning[0].print_graded();
-    //print K
-    // pruning[1].print_graded();
-
-    M.append_matrix(pruning[1]);
-    Mat Pru_M = pruning[0].presentation_of_submodule(M);
-    Pru_M.sort_columns_lexicographically();
-    Pru_M.semi_minimize();
-    std::ofstream output_file(output_path);
-    if (!output_file.is_open()) {
-        std::cerr << "Error: Unable to open output file " << output_path << std::endl;
-        return 1;
+    if (!col_degrees.empty()) {
+        min_x = max_x = col_degrees[0].first;
+        min_y = max_y = col_degrees[0].second;
     } else {
-        Pru_M.to_stream(output_file);
-        output_file.close();
-        std::cout << "Pruning (" << delta << ") computed and saved to: " << output_path << std::endl;
+        min_x = max_x = row_degrees[0].first;
+        min_y = max_y = row_degrees[0].second;
     }
     
-    return 0;
+    // Find bounding box of all degrees
+    for (const auto& d : col_degrees) {
+        min_x = std::min(min_x, d.first);
+        max_x = std::max(max_x, d.first);
+        min_y = std::min(min_y, d.second);
+        max_y = std::max(max_y, d.second);
+    }
+    for (const auto& d : row_degrees) {
+        min_x = std::min(min_x, d.first);
+        max_x = std::max(max_x, d.first);
+        min_y = std::min(min_y, d.second);
+        max_y = std::max(max_y, d.second);
+    }
+    
+    // Compute max extent
+    double extent_x = max_x - min_x;
+    double extent_y = max_y - min_y;
+    double extent = std::max(extent_x, extent_y);
+    
+    if (extent < 1e-10) {
+        return std::nullopt;
+    }
+    
+    return extent * 0.01; // 1% of the extent
 }
+
+double get_delta(std::optional<double> user_delta, const Mat& M) {
+    if (user_delta.has_value()) {
+        std::cout << "Using specified delta: " << user_delta.value() << std::endl;
+        return user_delta.value();
+    }
+    
+    auto calculated = calculate_delta_from_matrix(M);
+    if (calculated.has_value()) {
+        std::cout << "Using calculated delta: " << calculated.value() << std::endl;
+        return calculated.value();
+    }
+    
+    std::cout << "Using default delta: 0.01" << std::endl;
+    return 0.01;
+}
+
+}// namespace stable_decomposition
+

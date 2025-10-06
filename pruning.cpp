@@ -354,7 +354,7 @@ int main(int argc, char** argv){
         filepath = argv[1];
     }
     
-    double delta = 0.01;
+    double delta = 0.05;
     std::filesystem::path input_path(filepath);
     std::cout << "Computing the pruning of " << input_path << std::endl;
 

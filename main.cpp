@@ -14,6 +14,7 @@ int main(int argc, char** argv) {
     M.sort_columns_lexicographically();
     M.sort_rows_lexicographically();
     double delta = get_delta(opts.delta, M);
+    delta = 0.01;
     
     std::cout << "Computing pruning of " << opts.input_file 
               << " (delta=" << delta << ")" << std::endl;

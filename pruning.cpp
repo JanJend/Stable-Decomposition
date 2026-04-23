@@ -88,14 +88,15 @@ void matrix_reduction(vec<Mat>& A, vec<Mat>& B){
     }
   }
   vec_deletion(B, zero_columns); 
-  // To-DO: Probably should do this differently, since we expect there to be few non-zero matrices in B.
+  // Todo: Probably should do this differently, since we expect there to be few non-zero matrices in B.
 }
 
 vec<Mat> homSpace(Mat& A, Mat& B) {
   // H: why does it allow me to compute rows forward when A is const where I'm
   // calling homSpace??
   // J: Your input is not Mat&A, but Mat A, so youre implicitely copying the input and then you can change it.
-  //TODO F: I don't understand the question, but the answer seems not to align with the function signature
+  // F: I don't understand the question, but the answer seems not to align with the function signature
+  // J: seems to be fixed.
   A.compute_rows_forward();
   return hom_space_basis<r2degree, int, Mat>(
       A, B); // returns a basis of Hom(A, B) as a vector of matrices
@@ -104,7 +105,7 @@ vec<Mat> homSpace(Mat& A, Mat& B) {
 
 vec<Mat> End_2d_0 (Mat &M, double delta) {
   Mat M_2d = M;
-  M_2d.shift({delta, delta});//TODO F: Is this the shift by delta or 2*delta?
+  M_2d.shift({delta, delta});//TODO F: Is this the shift by delta or 2*delta? // J: This is the shift by (delta, delta) in R^2
   vec<Mat> End_2d;
   try {
     End_2d = timed_with_progress("End_2d running", homSpace, M, M_2d);
@@ -122,9 +123,7 @@ vec<Mat> End_2d_0 (Mat &M, double delta) {
     std::cerr << "Exception caught: " << e.what() << std::endl;
     throw;
   }
-  for(auto f : End_0){
-    f.shift_generators({delta, delta}); //TODO F: Didn't check thoroughly, but should the loop be over auto &f?
-  }
+
   matrix_reduction(End_0, End_2d);
   auto dim_quotient = End_2d.size();
   std::cout << "dim End_2d_0 = " << dim_quotient << " vs dim End_2d = " << dim_or << " and dim End_0 = " << End_0.size() << std::endl;
@@ -149,7 +148,8 @@ Mat all_submodule(const Mat &m) {
 Mat submodule_sum(Mat l, Mat r) {
   assert(l.row_degrees == r.row_degrees);
   l.append_matrix(std::move(r));
-  auto nzc = l.column_reduction_graded();//TODO Doesn't this function require columns sorted by grade?
+  l.sort_columns_lexicographically();
+  auto nzc = l.column_reduction_graded();
   l.delete_all_but_columns(nzc);
   return l;
 }
@@ -159,7 +159,6 @@ Mat reduce_submodule(Mat M, Mat S) {//TODO Implementation looks like lots of cop
   auto M_copy = M;
   S.sort_columns_lexicographically();
   M_copy.append_matrix(S);
-  M_copy.column_reduction_graded();
   auto nzc = M_copy.column_reduction_graded();
   int n = M.get_num_cols();
   for (int i = nzc.size() - 1; i >= 0; --i) {

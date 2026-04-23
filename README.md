@@ -8,24 +8,25 @@ A C++ implementation for computing the pruning of a multiparameter persistence m
 This tool reads a presentation matrix from a file, computes the pruning, and optionally saves the result as a minimal presentation matrix.
 
 ## Building
-
+The following builds two binaries `pruning` and `tests` inside the directory `build/`.
 ```bash
-mkdir build
+mkdir build && cd build
 cmake ..
-make .
+make
 ```
+To build with debug symbols, replace `cmake ..` with `CMAKE_BUILD_TYPE=Debug cmake ..`.
 
 ## Usage
 
 ```bash
-./main <file_path> [options]
+./build/pruning <file_path> [options]
 ```
 
 ### Options
 
 - `--delta <value>` - Set delta threshold value (default: 1% of the range of all degrees)
 - `--no-output` - Skip saving the output file
-- `--no-timers` - Disable timing output (doesnt work yet)
+- `--no-timers` - Disable timing output (doesn't work yet)
 
 ### Examples
 

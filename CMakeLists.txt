@@ -18,7 +18,6 @@ set(SOURCES
 )
 
 # Dependencies
-cmake_policy(SET CMP0167 NEW) # Use new mechanism for finding Boost
 find_package(Boost REQUIRED COMPONENTS timer graph)
 
 # Include directories

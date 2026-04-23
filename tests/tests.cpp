@@ -10,7 +10,8 @@ TEST_CASE("test1.scc") {
     Mat M(input);
     auto P = pruning(M, delta);
     Mat P_expected(result);
-    CHECK(P.row_degrees == P_expected.row_degrees && P.col_degrees == P_expected.col_degrees);
+    CHECK(P.row_degrees == P_expected.row_degrees);
+    CHECK(P.col_degrees == P_expected.col_degrees);
 
     //TODO F: One cannot really check if P and P_expected present isomorphic modules, because that's a hard problem.
     //        Testing if two matrices span /identical/ submodules or subquotients of a given module should be easier;

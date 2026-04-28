@@ -18,11 +18,17 @@ set(SOURCES
 )
 
 # Dependencies
-find_package(Boost REQUIRED COMPONENTS timer graph)
+if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.30)
+    cmake_policy(SET CMP0167 NEW)
+endif()
+find_package(Boost COMPONENTS timer graph)
+if(NOT ${Boost_FOUND})
+    message(WARNING "Optional dependency Boost not found; please report if build errors occur.")
+endif()
 
 # Include directories
 include_directories(${CMAKE_SOURCE_DIR}/include)
-include_directories(SYSTEM ${Boost_INCLUDE_DIRS} Persistence-Algebra/include) # suppress warnings for system includes
+include_directories(SYSYTEM ${Boost_INCLUDE_DIRS} Persistence-Algebra/include) # suppress warnings for system includes
 
 # Main executable
 add_executable(pruning main.cpp ${SOURCES})

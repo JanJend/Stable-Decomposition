@@ -145,6 +145,7 @@ Mat all_submodule(const Mat &m) {
   return Id;
 }; // M as submodule of M, likely unnecessary
 
+//TO-DO: For optimisation might not want to copy both
 Mat submodule_sum(Mat l, Mat r) {
   assert(l.row_degrees == r.row_degrees);
   l.append_matrix(std::move(r));
@@ -155,7 +156,7 @@ Mat submodule_sum(Mat l, Mat r) {
 }
 
 //TODO H:  Check correctness.
-Mat reduce_submodule(Mat M, Mat S) {//TODO Implementation looks like lots of copying, given that it's repeatedly called on the same matrix.
+Mat reduce_submodule(Mat& M, Mat& S) {//TODO Implementation looks like lots of copying, given that it's repeatedly called on the same matrix.
   auto M_copy = M;
   S.sort_columns_lexicographically();
   M_copy.append_matrix(S);

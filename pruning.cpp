@@ -246,11 +246,12 @@ std::pair<Mat, Mat> pruning_pair(Mat &M, const double delta) {
     for (size_t idx = 0; const auto &f : B) {
       print_progress(iteration_I, ++idx, B.size());
       Mat foI = f * I_new;                          // generators of f(Iᵢ) ⊆ M(2δ)
-      Mat canI = I_new;                             // generators of can(Iᵢ) ⊆ M(2δ)
+      Mat canI = I_new;                               // generators of can(Iᵢ) ⊆ M(2δ)
                                                     //TODO F: Is it generators of can(I) \subseteq M or I \subseteq M(2d)?
       canI.shift_generators({delta, delta});
       auto inv = foI.inverse_image_copy(M2d, canI); // generators of f⁻¹(can(Iᵢ)) ⊆ I
-      I_new = reduce_submodule(M, I_new * inv);     // generators of f⁻¹(can(Iᵢ)) ⊆ M
+      auto I_newnew = I_new * inv;
+      I_new = reduce_submodule(M, I_newnew);     // generators of f⁻¹(can(Iᵢ)) ⊆ M
                                                     // H: without reduce_submodule, this gets suuuper slow
                                                     //TODO F: How can that be, shouldn't inverse image reduce?
     }

@@ -60,7 +60,7 @@ Mat submodule_sum(Mat l, Mat r);
  * @param S generators of a submodule S ⊆ M
  * @param M presentation of the ambient module M
  */
-Mat reduce_submodule(Mat M, Mat S);
+Mat reduce_submodule(Mat& M, Mat& S);
 
 Mat image(const Mat &f, const Mat &A, const Mat &B, const Mat &U);
 

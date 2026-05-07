@@ -365,4 +365,3 @@ double get_delta(std::optional<double> user_delta, const Mat& M) {
 }
 
 }// namespace stable_decomposition
-

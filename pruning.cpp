@@ -277,6 +277,7 @@ std::pair<Mat, Mat> pruning_pair(Mat &M, const double delta) {
       S = canI.inverse_image_copy(M2d, S);          // generators of sh⁻¹(f(Kᵢ), 2δ) ⊆ I
       S = I * S;                                    // generators of sh⁻¹(f(Kᵢ), 2δ) ⊆ M
       K_new.append_matrix(S);                       // K_{i+1} \coloneqq K_{}
+      K_new = reduce_submodule(M, K_new);
     }
     K_new = reduce_submodule(M, K_new);
     print_progress(iteration_K, B.size(), B.size());

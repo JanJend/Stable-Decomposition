@@ -250,8 +250,8 @@ std::pair<Mat, Mat> pruning_pair(Mat &M, const double delta) {
                                                     //TODO F: Is it generators of can(I) \subseteq M or I \subseteq M(2d)?
       canI.shift_generators({delta, delta});
       auto inv = foI.inverse_image_copy(M2d, canI); // generators of f⁻¹(can(Iᵢ)) ⊆ I
-      auto I_newnew = I_new * inv;
-      I_new = reduce_submodule(M, I_newnew);     // generators of f⁻¹(can(Iᵢ)) ⊆ M
+      Mat tempxx = I_new * inv;
+      I_new = reduce_submodule(M, tempxx);     // generators of f⁻¹(can(Iᵢ)) ⊆ M
                                                     // H: without reduce_submodule, this gets suuuper slow
                                                     //TODO F: How can that be, shouldn't inverse image reduce?
     }
@@ -297,9 +297,9 @@ Mat pruning(Mat &M, const double delta) {
   auto [I, K] = pruning_pair(M, delta);         // generators for I ⊆ M and K ⊆ M
   M.append_matrix(K);                           // presentation for M / K
   Mat Pru_M = I.presentation_of_submodule(M);   // presentation for I / K
-  Pru_M.sort_columns_lexicographically();
-  Pru_M.sort_rows_lexicographically();
-  Pru_M.minimize();
+  //Pru_M.sort_columns_lexicographically();
+  //Pru_M.sort_rows_lexicographically();
+  //Pru_M.minimize();
   return Pru_M;
 } 
 
@@ -365,4 +365,3 @@ double get_delta(std::optional<double> user_delta, const Mat& M) {
 }
 
 }// namespace stable_decomposition
-

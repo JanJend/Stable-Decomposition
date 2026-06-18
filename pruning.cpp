@@ -11,6 +11,9 @@
 
 #include "include/pruning.hpp"
 #include <thread>
+#include <numeric>
+#include <algorithm>
+#include <random>
 
 namespace stable_decomposition {
 
@@ -98,7 +101,7 @@ vec<Mat> homSpace(Mat& A, Mat& B) {
   // F: I don't understand the question, but the answer seems not to align with the function signature
   // J: seems to be fixed.
   A.compute_rows_forward();
-  return hom_space_basis<r2degree, int, Mat>(
+  return hom_space_basis_new<r2degree, int, Mat>(
       A, B); // returns a basis of Hom(A, B) as a vector of matrices
 }; // basis of Hom(A, B); done by hom_space_basis
 
@@ -189,8 +192,21 @@ Mat shifting_morphism(Mat A, double delta) {
 
 /// Return true of im M is contained in im N TODO: Is this correct? Relations
 /// implicitely ignored.
+/// H: I think this is incorrect. In some cases where this should return true, we do not manage
+/// to reduce the columns of M to 0, and as a result return false.
 bool image_contained_in_image(const Mat &M, const Mat &N) {
   auto N_copy = N;
+  /* ///////// H: Attempt at fixing, but crashes.
+  N_copy.sort_columns_lexicographically();
+  N_copy.sort_rows_lexicographically();
+  N_copy.minimize();
+  auto cols_before = N_copy.col_degrees;
+  auto rows_before = N_copy.row_degrees;
+  N_copy.append_matrix(M);
+  N_copy.sort_columns_lexicographically();
+  N_copy.minimize(); // H: error here when minimize calls column_reduction_graded_w_deletion
+  return rows_before == N_copy.row_degrees && cols_before == N_copy.col_degrees;
+  ///////// */
   int threshold = N.get_num_cols();
   N_copy.append_matrix(M);
   N_copy.column_reduction_graded();
@@ -226,11 +242,13 @@ void print_progress(int iteration_I, size_t current, size_t total) {
   }
 }
 
-std::pair<Mat, Mat> pruning_pair(Mat &M, const double delta) {
+std::pair<Mat, Mat> pruning_pair(Mat &M, const double delta, const bool quick) {
   // In this function, matrices either represent presentations of modules (relations -> generators),
   // or generators of a submodule (generators of submodule -> generators of module).
   // Therefore, matrices representing submodules only make sense w.r.t. an ambient module,
   // while a presentation of a module exists independently.
+  // If quick==false, the number of iterations gives an upper bound on d_I(M,Pru_M).
+  // If quick==true, we run a different version that often gives fewer iterations, but with no such bound
 
   Mat M2d = M;                                      // presentation matrix for M(2δ)
   M2d.shift({delta, delta});
@@ -240,51 +258,160 @@ std::pair<Mat, Mat> pruning_pair(Mat &M, const double delta) {
   // Build the module I from the pruning pair (I,K)
   Mat I = all_submodule(M);                         // generators of Iᵢ ⊆ M, initialized I₀ = M ⊆ M
   int iteration_I = 1;
+  std::vector<size_t> B_indices(B.size());
+  B_indices.resize(B.size());                       // Gives the order we iterate over B. Randomized
+  std::iota(B_indices.begin(), B_indices.end(), 0); // if quick==true
+  if(quick){
+    std::random_device rd;
+    std::mt19937 g(rd());
+    std::shuffle(B_indices.begin(), B_indices.end(), g);
+    std::cout << std::endl;
+  }
+  size_t one_fifth = B.size();
+  if(B.size() >= 20){
+    one_fifth = B.size()/5;
+  }
+  Mat last_changed_I_new = I;
+  size_t last_changed_iteration = B.size() - 1;
+  bool done = false;
+  Mat I_new = I;                                  // Iᵢ₊₁ = ⋂_f f⁻¹(sh(Iᵢ, 2δ)),
   for (;;) {
     assert(I.row_degrees == M.row_degrees);
-    Mat I_new = I;                                  // Iᵢ₊₁ = ⋂_f f⁻¹(sh(Iᵢ, 2δ)),
-    for (size_t idx = 0; const auto &f : B) {
-      print_progress(iteration_I, ++idx, B.size());
-      Mat foI = f * I_new;                          // generators of f(Iᵢ) ⊆ M(2δ)
-      Mat canI = I_new;                               // generators of can(Iᵢ) ⊆ M(2δ)
+    size_t idx = 0;
+    Mat canI;
+    if(!quick){
+      canI = I_new;                               // generators of can(Iᵢ) ⊆ M(2δ)
                                                     //TODO F: Is it generators of can(I) \subseteq M or I \subseteq M(2d)?
       canI.shift_generators({delta, delta});
-      auto inv = foI.inverse_image_copy(M2d, canI); // generators of f⁻¹(can(Iᵢ)) ⊆ I
+      canI = reduce_submodule(M, canI);
+    }
+    //for (size_t idx = 0; const auto &f : B) {
+    for (size_t counter = 0; counter < B.size(); counter++) {
+      print_progress(iteration_I, ++idx, B.size());
+      Mat& f = B[B_indices[counter]];
+      Mat foI = f * I_new;                          // generators of f(Iᵢ) ⊆ M(2δ)
+      if(quick){
+        canI = I_new;                               // generators of can(Iᵢ) ⊆ M(2δ)
+                                                      //TODO F: Is it generators of can(I) \subseteq M or I \subseteq M(2d)?
+        canI.shift_generators({delta, delta});
+        canI = reduce_submodule(M, canI);
+      }
+      Mat inv = foI.inverse_image(M2d, canI); // generators of f⁻¹(can(Iᵢ)) ⊆ I
       Mat I_newxinv = I_new * inv;
       I_new = reduce_submodule(M, I_newxinv);     // generators of f⁻¹(can(Iᵢ)) ⊆ M
                                                     // H: without reduce_submodule, this gets suuuper slow
                                                     //TODO F: How can that be, shouldn't inverse image reduce?
+      // Break if we have gone one full run through all f without any change.
+      // Check 5 times per run through B (5 is completely arbitrary)
+      if(quick && (B.size() - 1 - counter) % one_fifth == 0){
+        Mat MI_new = M;
+        MI_new.append_matrix(I_new);
+        if(!image_contained_in_image(last_changed_I_new, MI_new)){
+          last_changed_I_new = I_new;
+          last_changed_iteration = counter;
+          continue;
+        }
+        if(last_changed_iteration == counter){
+          done = true;
+          I = I_new;
+          break;
+        }
+      }
     }
-    print_progress(iteration_I, B.size(), B.size());
+    
+    print_progress(iteration_I, idx, B.size());
     std::cout << std::endl;
-    if (present_same_submodule(M, I_new, I))        // run until stationary
+    if(quick){
+      if(done){
+        break;
+      }
+      iteration_I++;
+      continue;
+    }
+    Mat MI_new = M;
+    MI_new.append_matrix(I_new);
+    if(image_contained_in_image(I, MI_new)){
       break;
-    std::swap(I, I_new);
+    }
+    /* H: Could add the following check
+    if (image_contained_in_image(I_new, M)){
+      Mat zro = zero_submodule(M);
+      return {zro, zro};
+    }*/
+    //if (present_same_submodule(M, I_new, I))        // run until stationary
+                                                    // H: I_new should automatically be a submod of I, so it
+                                                    // should be enough to run image_contained_in_image once
+                                                    // instead of twice, like it is in present_same_submodule
+    //  break;
+    I = I_new;
     iteration_I++;
   }
 
   // Build the module K from the pruning pair (I,K)
-  auto canI = I;                                    // generators of can(I) ⊆ M(2δ)
+  done = false;
+  Mat canI = I;                                    // generators of can(I) ⊆ M(2δ)
   canI.shift_generators({delta, delta});
   Mat K = zero_submodule(M);                        // generators of Kᵢ ⊆ M, initialized K₀ = 0 ⊆ M
+  Mat K_new = K;
   int iteration_K = 1;
+  Mat last_changed_K_new = K;
+  last_changed_iteration = B.size() - 1;
   for (;;) {
+    size_t idx = 0;
     assert(K.row_degrees == M.row_degrees);
     //TODO F: I changed the implementation slightly, because it was taking not sh⁻¹(f(Kᵢ), 2δ), but sh⁻¹(f([summation so far]), 2δ)
     //        I don't think that this has implications on correctness, but better reflects what we write I think.
-    Mat K_new = zero_submodule(M);                  // Kᵢ₊₁ = ∑_f sh⁻¹(f(Kᵢ), 2δ)
-    for (size_t idx = 0; const auto &f : B) {
+    if(!quick){
+      Mat K_new = zero_submodule(M);                  // Kᵢ₊₁ = ∑_f sh⁻¹(f(Kᵢ), 2δ)
+    }
+    for (size_t counter = 0; counter < B.size(); counter++) {
       print_progress(iteration_K, ++idx, B.size());
-      auto S = f * K_new;                           // generators of f(Kᵢ) ⊆ M(2δ)
-      S = canI.inverse_image_copy(M2d, S);          // generators of sh⁻¹(f(Kᵢ), 2δ) ⊆ I
+      Mat& f = B[B_indices[counter]];
+      Mat S;
+      if(quick){
+        S = f * K_new;
+      }else{
+        S = f * K;                                    // generators of f(Kᵢ) ⊆ M(2δ)
+      }
+      canI = I;                                    // generators of can(I) ⊆ M(2δ)
+      canI.shift_generators({delta, delta});
+      S = canI.inverse_image(M2d, S);          // generators of sh⁻¹(f(Kᵢ), 2δ) ⊆ I
+                                          // H: I'd like to use inverse_image_copy to avoid redefining
+                                          // canI every loop, but iic doesn't compile.
       S = I * S;                                    // generators of sh⁻¹(f(Kᵢ), 2δ) ⊆ M
       K_new.append_matrix(S);                       // K_{i+1} \coloneqq K_{}
       K_new = reduce_submodule(M, K_new);
+      // Break if we have gone one full run through all f without any change.
+      // Check 5 times per run through B (5 is completely arbitrary)
+      if(quick && (B.size() - 1 - counter) % one_fifth == 0){
+        Mat Mlast = M;
+        Mlast.append_matrix(last_changed_K_new);
+        if(!image_contained_in_image(K_new, Mlast)){
+          last_changed_K_new = K_new;
+          last_changed_iteration = counter;
+          continue;
+        }
+        if(last_changed_iteration == counter){
+          done = true;
+          K = K_new;
+          break;
+        }
+      }
     }
     K_new = reduce_submodule(M, K_new);
-    print_progress(iteration_K, B.size(), B.size());
+    print_progress(iteration_K, idx, B.size());
     std::cout << std::endl;
-    if (present_same_submodule(M, K_new, K)) 
+    if(quick){
+      if(done){
+        break;
+      }
+      iteration_K++;
+      continue;
+    }
+    Mat MK = M;
+    MK.append_matrix(K);
+    if(image_contained_in_image(K_new, MK))
+    //if (present_same_submodule(M, K_new, K)) 
       break;
     std::swap(K, K_new);
     iteration_K++;
@@ -293,15 +420,18 @@ std::pair<Mat, Mat> pruning_pair(Mat &M, const double delta) {
   return {I, K};
 }
 
-Mat pruning(Mat &M, const double delta) {
-  auto [I, K] = pruning_pair(M, delta);         // generators for I ⊆ M and K ⊆ M
+Mat pruning(Mat &M, const double delta, bool quick) {
+  auto [I, K] = pruning_pair(M, delta, quick);         // generators for I ⊆ M and K ⊆ M
+  //Mat K_module = K.presentation_of_submodule(M);
+  //return K_module;
   M.append_matrix(K);                           // presentation for M / K
   Mat Pru_M = I.presentation_of_submodule(M);   // presentation for I / K
   Pru_M.sort_columns_lexicographically();
   Pru_M.sort_rows_lexicographically();
-  Pru_M.minimize_variant();
+  Pru_M.column_reduction_graded_w_deletion();
+  Pru_M.minimize();
   return Pru_M;
-} 
+}
 
 std::optional<double> calculate_delta_from_matrix(const Mat& M) {
     const vec<r2degree>& col_degrees = M.col_degrees;

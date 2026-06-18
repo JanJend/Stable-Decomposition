@@ -13,13 +13,13 @@ int main(int argc, char** argv) {
     Mat M(opts.input_file);
     M.sort_columns_lexicographically();
     M.sort_rows_lexicographically();
-    double delta = get_delta(opts.delta, M);
-    delta = 0.01;
+    //double delta = get_delta(opts.delta, M);
+    double delta = 1;
     
     std::cout << "Computing pruning of " << opts.input_file 
               << " (delta=" << delta << ")" << std::endl;
     
-    Mat Pru_M = pruning(M, delta);
+    Mat Pru_M = pruning(M, delta, true);
     
     if (!opts.no_output) {
         std::string output_path = generate_output_path(opts.input_file, delta);

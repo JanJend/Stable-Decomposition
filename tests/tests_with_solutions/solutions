@@ -1,0 +1,8 @@
+This folder contains presentations and prunings (up to isomorphism) of the examples with a given pruning parameter.
+Note that different presentations may give rise to the same module up to iso.
+
+The solutions with name [filename]_pru[pruning parameter].scc where the pruning parameter does not have trailing zeros have been checked by hand. (Which still leaves the possibility that they're wrong.)
+
+test4.scc is a version of the example from the original pruning paper.
+
+// H: the 1-pruning of test1 is the zero module, so the solution is correct in that sense. But shouldn't it still contain a preamble before the empty presentation?

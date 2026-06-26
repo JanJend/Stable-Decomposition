@@ -300,7 +300,9 @@ std::pair<Mat, Mat> pruning_pair(Mat &M, const double delta, const bool quick) {
   vec<Mat> B = End_2d_0(M, delta);                  // basis of Hom(M, M(2δ)).
   Mat can = shifting_morphism(M, delta);            // canonical morphism can: M → M(2δ)
   
-  // Build the module I from the pruning pair (I,K)
+  /////////////////////////////////////////////////////////////////////
+  ////////// Build the module I from the pruning pair (I,K) //////////
+  /////////////////////////////////////////////////////////////////////
   Mat I = all_submodule(M);                         // generators of Iᵢ ⊆ M, initialized I₀ = M ⊆ M
   int iteration_I = 1;
   std::vector<size_t> B_indices(B.size());
@@ -392,7 +394,9 @@ std::pair<Mat, Mat> pruning_pair(Mat &M, const double delta, const bool quick) {
     iteration_I++;
   }
 
-  // Build the module K from the pruning pair (I,K)
+  /////////////////////////////////////////////////////////////////////
+  ////////// Build the module K from the pruning pair (I,K) //////////
+  /////////////////////////////////////////////////////////////////////
   done = false;
   Mat canI = I;                                    // generators of can(I) ⊆ M(2δ)
   canI.shift_generators({delta, delta});
@@ -475,6 +479,7 @@ Mat pruning(Mat &M, const double delta, bool quick) {
   Pru_M.sort_rows_lexicographically();
   Pru_M.column_reduction_graded_w_deletion();
   Pru_M.minimize();
+  Pru_M.shift({-delta/2, -delta/2});
   return Pru_M;
 }
 

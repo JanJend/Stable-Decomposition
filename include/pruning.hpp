@@ -103,9 +103,10 @@ std::pair<Mat, Mat> pruning_pair(Mat &M, const double delta);
  *
  * The δ-pruning of a module M with δ-pruning pair K ⊆ I ⊆ M is the module I/K.
  * @param M presentation matrix of the module
+ * @param quick if true, use the faster variant of the computation
  * @returns a presentation matrix for I/K
  */
-Mat pruning(Mat &M, const double delta);
+Mat pruning(Mat &M, const double delta, bool quick = false);
 
 // Delta calculation
 std::optional<double> calculate_delta_from_matrix(const Mat& M);

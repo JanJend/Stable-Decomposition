@@ -1,3 +1,5 @@
+
+
 /**
  * @file pruning.cpp
  * @author Havard Bjerkevik, Jan Jendrysiak, and Fabian Lenzen
@@ -14,6 +16,7 @@
 #include <numeric>
 #include <algorithm>
 #include <random>
+
 
 namespace stable_decomposition {
 
@@ -320,7 +323,7 @@ std::pair<Mat, Mat> pruning_pair(Mat &M, const double delta, const bool quick) {
   }
   Mat last_changed_I_new = I;
   size_t last_changed_iteration = B.size() - 1;
-  bool done = false;
+  bool done = false;  
   Mat I_new = I;                                  // Iᵢ₊₁ = ⋂_f f⁻¹(sh(Iᵢ, 2δ)),
   for (;;) {
     assert(I.row_degrees == M.row_degrees);
@@ -330,7 +333,7 @@ std::pair<Mat, Mat> pruning_pair(Mat &M, const double delta, const bool quick) {
       canI = I_new;                               // generators of can(Iᵢ) ⊆ M(2δ)
                                                     //TODO F: Is it generators of can(I) \subseteq M or I \subseteq M(2d)?
       canI.shift_generators({delta, delta});
-      canI = reduce_submodule(M, canI);
+      canI = reduce_submodule(M2d, canI);
     }
     //for (size_t idx = 0; const auto &f : B) {
     for (size_t counter = 0; counter < B.size(); counter++) {
@@ -341,7 +344,7 @@ std::pair<Mat, Mat> pruning_pair(Mat &M, const double delta, const bool quick) {
         canI = I_new;                               // generators of can(Iᵢ) ⊆ M(2δ)
                                                       //TODO F: Is it generators of can(I) \subseteq M or I \subseteq M(2d)?
         canI.shift_generators({delta, delta});
-        canI = reduce_submodule(M, canI);
+        canI = reduce_submodule(M2d, canI);
       }
       Mat inv = foI.inverse_image(M2d, canI); // generators of f⁻¹(can(Iᵢ)) ⊆ I
       Mat I_newxinv = I_new * inv;

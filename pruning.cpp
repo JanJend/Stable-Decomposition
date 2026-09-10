@@ -486,6 +486,20 @@ Mat pruning(Mat &M, const double delta, bool quick) {
   return Pru_M;
 }
 
+std::pair<OwnedSubmodule, OwnedSubmodule> pruning_pair(
+    std::shared_ptr<const PModule> module, const double delta, bool quick) {
+  if (!module) throw std::invalid_argument("pruning_pair requires a module");
+  Mat presentation = module->presentation();
+  auto [I, K] = pruning_pair(presentation, delta, quick);
+  return {OwnedSubmodule(module, std::move(I)),
+          OwnedSubmodule(module, std::move(K))};
+}
+
+PModule pruning(PModule module, const double delta, bool quick) {
+  Mat& presentation = module.mutable_presentation();
+  return PModule(pruning(presentation, delta, quick));
+}
+
 std::optional<double> calculate_delta_from_matrix(const Mat& M) {
     const vec<r2degree>& col_degrees = M.col_degrees;
     const vec<r2degree>& row_degrees = M.row_degrees;

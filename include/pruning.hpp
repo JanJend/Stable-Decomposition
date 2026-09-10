@@ -20,6 +20,8 @@ namespace stable_decomposition {
 using index_t = int; // Change to large enough int type.
 
 using Mat = graded_linalg::R2GradedSparseMatrix<index_t>;
+using PModule = graded_linalg::R2Module<index_t>;
+using OwnedSubmodule = graded_linalg::Submodule<Mat>;
 using graded_linalg::vec;
 
 void matrix_reduction(vec<Mat>& A, vec<Mat>& B);
@@ -96,7 +98,11 @@ void print_progress(int iteration_I, size_t current, size_t total);
  * @param M presentation of a module M
  * @returns δ-pruning pair [I, K] of M
  */
-std::pair<Mat, Mat> pruning_pair(Mat &M, const double delta);
+std::pair<Mat, Mat> pruning_pair(Mat &M, const double delta, bool quick = false);
+
+/** Module-aware pruning pair; matrix overload above remains compatible. */
+std::pair<OwnedSubmodule, OwnedSubmodule> pruning_pair(
+    std::shared_ptr<const PModule> module, const double delta, bool quick = false);
 
 /**
  * Computes the δ-pruning of a module.
@@ -107,6 +113,9 @@ std::pair<Mat, Mat> pruning_pair(Mat &M, const double delta);
  * @returns a presentation matrix for I/K
  */
 Mat pruning(Mat &M, const double delta, bool quick = false);
+
+/** Module-owning pruning entry point used by the executable. */
+PModule pruning(PModule module, const double delta, bool quick = false);
 
 // Delta calculation
 std::optional<double> calculate_delta_from_matrix(const Mat& M);

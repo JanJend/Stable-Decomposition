@@ -155,24 +155,32 @@ Mat all_submodule(const Mat &m) {
 Mat submodule_sum(Mat l, Mat r) {
   assert(l.row_degrees == r.row_degrees);
   l.append_matrix(std::move(r));
-  l.sort_columns_lexicographically();
+  l.sort_compatibly();
   auto nzc = l.column_reduction_graded();
   l.delete_all_but_columns(nzc);
   return l;
 }
 
-//TODO H:  Check correctness.
 Mat reduce_submodule(Mat& M, Mat& S) {//TODO Implementation looks like lots of copying, given that it's repeatedly called on the same matrix.
   auto M_copy = M;
-  S.sort_columns_lexicographically();
+  S.sort_compatibly();
   M_copy.append_matrix(S);
-  auto nzc = M_copy.column_reduction_graded();
-  int n = M.get_num_cols();
-  for (int i = nzc.size() - 1; i >= 0; --i) {
-    if (nzc[i] < n) {
-      nzc.erase(nzc.begin() + i);
-    }
+  const int relation_count = M.get_num_cols();
+  M_copy.sort_rows_lexicographically();
+  auto old_to_new = M_copy.sort_columns_lexicographically_with_output();
+  vec<int> generator_positions;
+  generator_positions.reserve(S.get_num_cols());
+  for (int column = relation_count;
+       column < relation_count + S.get_num_cols(); ++column) {
+    generator_positions.push_back(old_to_new[column]);
   }
+  std::sort(generator_positions.begin(), generator_positions.end());
+  auto nzc = M_copy.column_reduction_graded();
+  nzc.erase(std::remove_if(nzc.begin(), nzc.end(), [&](int column) {
+              return !std::binary_search(generator_positions.begin(),
+                                         generator_positions.end(), column);
+            }),
+            nzc.end());
   if (nzc.size() == 0) {
     return zero_submodule(M);
   }

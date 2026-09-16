@@ -13,7 +13,6 @@ ProgramOptions parse_arguments(int argc, char** argv) {
                   << "  --delta <value>   Set delta value (default: 0.02)\n"
                   << "  --no-output       Skip saving output file\n"
                   << "  --no-timers       Disable timing output\n";
-        opts.input_file = "/home/wsljan/MP-Workspace/mpm_generation/skyscraper/handcrafted_example/two_circles.scc";
         return opts;
     }
     

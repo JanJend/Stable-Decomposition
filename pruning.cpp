@@ -161,31 +161,11 @@ Mat submodule_sum(Mat l, Mat r) {
   return l;
 }
 
-Mat reduce_submodule(Mat& M, Mat& S) {//TODO Implementation looks like lots of copying, given that it's repeatedly called on the same matrix.
-  auto M_copy = M;
-  S.sort_compatibly();
-  M_copy.append_matrix(S);
-  const int relation_count = M.get_num_cols();
-  M_copy.sort_rows_lexicographically();
-  auto old_to_new = M_copy.sort_columns_lexicographically_with_output();
-  vec<int> generator_positions;
-  generator_positions.reserve(S.get_num_cols());
-  for (int column = relation_count;
-       column < relation_count + S.get_num_cols(); ++column) {
-    generator_positions.push_back(old_to_new[column]);
-  }
-  std::sort(generator_positions.begin(), generator_positions.end());
-  auto nzc = M_copy.column_reduction_graded();
-  nzc.erase(std::remove_if(nzc.begin(), nzc.end(), [&](int column) {
-              return !std::binary_search(generator_positions.begin(),
-                                         generator_positions.end(), column);
-            }),
-            nzc.end());
-  if (nzc.size() == 0) {
-    return zero_submodule(M);
-  }
-  M_copy.delete_all_but_columns(nzc);
-  return M_copy;
+Mat reduce_submodule(Mat& M, Mat& S) {
+  auto parent = std::make_shared<const PModule>(M);
+  OwnedSubmodule submodule(parent, S);
+  submodule.minimize_generators();
+  return submodule.generators();
 }
 
 

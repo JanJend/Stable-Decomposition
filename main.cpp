@@ -9,6 +9,7 @@ using namespace stable_decomposition;
 
 int main(int argc, char** argv) {
     auto opts = parse_arguments(argc, argv);
+    if (opts.input_file.empty()) return 1;
     
     PModule M(opts.input_file);
     M.sort_compatibly();

@@ -3,6 +3,28 @@
 #include <string>
 #include "../include/pruning.hpp"
 
+TEST_CASE("submodule syzygies preserve ambient coordinates") {
+    using namespace stable_decomposition;
+    // Incomparable a,b and c=a+b. All three survive ordinary graded reduction.
+    Mat parent(0, 3, {}, {}, {{0,0}, {-1,-1}, {-2,-2}});
+    Mat generators(3, 3, {{0,2}, {1,2}, {0,1}}, {{0,1}, {1,0}, {1,1}}, parent.row_degrees);
+    auto reduced = reduce_submodule(parent, generators);
+    CHECK(reduced.get_num_cols() == 2);
+    CHECK(reduced.row_degrees == parent.row_degrees);
+    CHECK(reduced.data == graded_linalg::array<int>({{0,2}, {1,2}}));
+}
+
+TEST_CASE("zero-scale pruning preserves a square interval") {
+    using namespace stable_decomposition;
+    Mat square(2, 1, {{0}, {0}}, {{0,1}, {1,0}}, {{0,0}});
+    PModule result = pruning(PModule(square), 0.0);
+    CHECK(result.dimension_at({0,0}) == 1);
+    CHECK(result.dimension_at({0.5,0.5}) == 1);
+    CHECK(result.dimension_at({1,0}) == 0);
+    CHECK(result.dimension_at({0,1}) == 0);
+    CHECK(result.presentation().data == graded_linalg::array<int>({{0}, {0}}));
+}
+
 TEST_CASE("test1.scc") {
     using namespace stable_decomposition;
     std::string input = "test1.scc";

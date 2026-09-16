@@ -7,7 +7,7 @@ conventional small-project layout, not a C++ requirement. All reusable compiled
 implementation now lives in `src/`; public declarations remain in `include/`.
 
 - `src/pruning.cpp`: only pruning-pair iterations and pruning entry points.
-- `src/delta.cpp` / `include/delta.hpp`: the parameter-selection heuristic.
+- `src/epsilon.cpp` / `include/epsilon.hpp`: the parameter-selection heuristic.
 - `src/utils.cpp` / `include/utils.hpp`: command-line parsing and output filenames.
 - `src/progress.cpp` / `include/progress.hpp`: iteration-progress display.
 - `src/algebra_compat.cpp` / `include/algebra_compat.hpp`: thin wrappers retaining
@@ -66,9 +66,10 @@ stable input storage; surviving B matrices are moved only after reduction.
 The shifted-lift complement retains the existing pruning convention: it takes
 a quotient of spaces of generator lifts, not Hom classes modulo target
 relations. Unshifted lifts are regraded into the shifted target before reduction.
-The old `End_2d_0` name is retained only for compatibility; its actual shift is
-`(delta, delta)`. This extraction does not change that convention or claim to
-prove the pruning algorithm's mathematical correctness.
+The primary helper is `End_2epsilon_0`; `End_2d_0` remains a compatibility name.
+Both now take epsilon and use `(2*epsilon, 2*epsilon)`. This corrects the old
+single-parameter shift. The extraction itself is not a proof of the pruning
+algorithm's mathematical correctness.
 
 Canonical shift maps subtract the shift from target generator degrees. They
 include identity lifts at every stored projective group, reject inadmissible
@@ -80,14 +81,27 @@ family is empty; previously its loop could never reach its stopping condition.
 The timer joins its worker on exceptions and wakes immediately on completion;
 it no longer delays every fast operation by a polling interval.
 
-## Delta behavior deliberately preserved
+## Epsilon selection and shift convention
 
-The extracted heuristic is unchanged: use the explicit delta if supplied;
-otherwise take 1% of the maximum coordinate extent over row and column degrees,
-falling back to 0.01 for empty/degenerate inputs. **main.cpp still explicitly
-sets delta to 1 and leaves the get_delta call commented out.** This refactor
-does not override that existing experimental choice; using the heuristic or
-`--delta` in the executable requires restoring that call.
+All pruning entry points take epsilon. The CLI now calls get_epsilon by default:
+use --epsilon when supplied, otherwise extract 1% of the maximum coordinate
+extent over row and column degrees, falling back to 0.01 for empty/degenerate
+inputs. The old hardcoded value 1 is removed. Negative, nonfinite and
+non-doublable values are rejected.
+
+The iteration obtains one shared diagonal shift from pruning_shift(epsilon):
+(2*epsilon, 2*epsilon). The shifted module, additional lifts and every canonical
+image use this same shift. The final result is (I/K)(-epsilon), so the final
+matrix shift is (-epsilon, -epsilon), not (-epsilon/2, -epsilon/2).
+Output filenames and logs identify epsilon; the log also prints the doubled shift.
+General-purpose homomorphism shifting in Persistence-Algebra continues to take
+an actual shift amount and does not double it implicitly.
+
+The old --delta/-delta flags and delta.hpp/get_delta/calculate_delta_from_matrix
+names forward to the epsilon API for compatibility; new code uses epsilon
+names. Historical fixture filenames are unchanged. Existing callers that
+previously supplied the internal shift to pruning must now supply half that
+value to reproduce the former scale.
 
 ## Tests
 
@@ -99,5 +113,9 @@ continue to cover the underlying kernel/minimization machinery.
 
 Stable-Decomposition's `algebra_adapters_test.cpp` exercises every old wrapper,
 zero-scale quick pruning, and timer success/reference/void/move-only/exception
-paths. `delta_test.cpp` checks empty, degenerate, row-only and mixed-degree
-heuristics and explicit overrides. Existing pruning integration tests remain.
+paths. `epsilon_test.cpp` checks empty, degenerate, row-only and mixed-degree
+heuristics and explicit overrides. Nonzero handmade free-module examples distinguish epsilon
+from 2*epsilon and test the final translation in both quick and normal modes.
+The executable-level CMake test verifies extraction, overrides, compatibility
+flags, zero epsilon and clean rejection of invalid inputs. Existing pruning
+integration tests remain.

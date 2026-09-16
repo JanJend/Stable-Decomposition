@@ -5,10 +5,10 @@
 
 struct ProgramOptions {
     std::string input_file;
-    std::optional<double> delta;  // None if not specified
+    std::optional<double> epsilon;  // None: extract from the input presentation
     bool no_output = false;
     bool no_timers = false;
 };
 
 ProgramOptions parse_arguments(int argc, char** argv);
-std::string generate_output_path(const std::string& input, double delta);
+std::string generate_output_path(const std::string& input, double epsilon);

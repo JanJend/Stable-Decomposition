@@ -30,24 +30,25 @@ for the full function mapping, behavioral notes, and tests.
 
 ### Options
 
-- `--delta <value>` - Set delta threshold value (default: 1% of the range of all degrees)
+- `--epsilon <value>` - Set epsilon (default: 1% of the range of all degrees; fallback 0.01).
+- `--delta <value>` - Compatibility alias for `--epsilon`.
 - `--no-output` - Skip saving the output file
 - `--no-timers` - Disable timing output (doesn't work yet)
 
 ### Examples
 
 ```bash
-# Basic usage with default delta
-./matrix_pruning input.scc
+# Basic usage with default epsilon
+./build/pruning input.scc
 
-# Custom delta value
-./matrix_pruning input.scc --delta 0.05
+# Custom epsilon value
+./build/pruning input.scc --epsilon 0.05
 
 # Process without saving output
-./matrix_pruning input.scc --no-output --no-timers
+./build/pruning input.scc --no-output --no-timers
 
 # Combine options
-./matrix_pruning input.scc --delta 0.01 --no-timers
+./build/pruning input.scc --epsilon 0.01 --no-timers
 ```
 
 ## Input Format
@@ -56,13 +57,16 @@ The program expects input files in `.scc` - sparse chain complex - format (link 
 
 ## Output
 
-Output files are automatically named with the pattern: `<input_name>_pru<delta><extension>`
+Output files are automatically named with the pattern: `<input_name>_pru<epsilon><extension>`
 
 Example: `torus3_largestcomp.scc` → `torus3_largestcomp_pru0.0200.scc`
 
 ## Default Behavior
 
-If no arguments are provided, the program uses `tests/torus3_largestcomp.scc` as the default input file.
+An input file is required. Without `--epsilon`, main extracts epsilon from its
+presentation. The iteration uses the diagonal shift `(2*epsilon, 2*epsilon)`;
+the final result is shifted by `(-epsilon, -epsilon)`. Output filenames record
+epsilon, not its doubled value. Epsilon must be finite and nonnegative.
 
 ## Version
 

@@ -1,10 +1,20 @@
-#include "delta.hpp"
+#include "epsilon.hpp"
 #include <algorithm>
 #include <iostream>
+#include <cmath>
+#include <stdexcept>
+#include "delta.hpp"
 
 namespace stable_decomposition {
 
-std::optional<double> calculate_delta_from_matrix(const Mat& M) {
+graded_linalg::r2degree pruning_shift(double epsilon) {
+    if (!std::isfinite(epsilon) || epsilon < 0 || !std::isfinite(2 * epsilon))
+        throw std::invalid_argument("epsilon must be finite and nonnegative, and 2*epsilon must be finite");
+    return {2 * epsilon, 2 * epsilon};
+}
+
+
+std::optional<double> calculate_epsilon_from_matrix(const Mat& M) {
     const auto& col_degrees = M.col_degrees;
     const auto& row_degrees = M.row_degrees;
 
@@ -49,20 +59,30 @@ std::optional<double> calculate_delta_from_matrix(const Mat& M) {
     return extent * 0.01; // 1% of the extent
 }
 
-double get_delta(std::optional<double> user_delta, const Mat& M) {
-    if (user_delta.has_value()) {
-        std::cout << "Using specified delta: " << user_delta.value() << std::endl;
-        return user_delta.value();
+double get_epsilon(std::optional<double> user_epsilon, const Mat& M) {
+    if (user_epsilon.has_value()) {
+        (void)pruning_shift(user_epsilon.value());
+        std::cout << "Using specified epsilon: " << user_epsilon.value() << std::endl;
+        return user_epsilon.value();
     }
 
-    auto calculated = calculate_delta_from_matrix(M);
+    auto calculated = calculate_epsilon_from_matrix(M);
     if (calculated.has_value()) {
-        std::cout << "Using calculated delta: " << calculated.value() << std::endl;
+        (void)pruning_shift(calculated.value());
+        std::cout << "Using calculated epsilon: " << calculated.value() << std::endl;
         return calculated.value();
     }
 
-    std::cout << "Using default delta: 0.01" << std::endl;
+    std::cout << "Using default epsilon: 0.01" << std::endl;
     return 0.01;
+}
+
+// Historical function names retained for source and link compatibility.
+std::optional<double> calculate_delta_from_matrix(const Mat& matrix) {
+    return calculate_epsilon_from_matrix(matrix);
+}
+double get_delta(std::optional<double> value, const Mat& matrix) {
+    return get_epsilon(value, matrix);
 }
 
 } // namespace stable_decomposition

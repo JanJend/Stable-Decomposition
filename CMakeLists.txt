@@ -25,7 +25,7 @@ set(SOURCES
     src/pruning.cpp
     src/utils.cpp
     src/algebra_compat.cpp
-    src/delta.cpp
+    src/epsilon.cpp
     src/progress.cpp
 )
 
@@ -79,9 +79,13 @@ find_package(doctest QUIET)
 if(doctest_FOUND)
     include(CTest)
     include(doctest)
-    add_executable(tests tests/tests.cpp tests/algebra_adapters_test.cpp tests/delta_test.cpp)
+    add_executable(tests tests/tests.cpp tests/algebra_adapters_test.cpp tests/epsilon_test.cpp)
     target_link_libraries(tests PRIVATE doctest::doctest stable_pruning)
     doctest_discover_tests(tests WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/tests)
     add_test(NAME pruning_requires_input COMMAND $<TARGET_FILE:pruning>)
     set_tests_properties(pruning_requires_input PROPERTIES WILL_FAIL TRUE)
+    add_test(NAME pruning_epsilon_cli COMMAND ${CMAKE_COMMAND}
+        -DPRUNING=$<TARGET_FILE:pruning> -DINPUT=${CMAKE_SOURCE_DIR}/tests/test1.scc
+        -P ${CMAKE_SOURCE_DIR}/tests/epsilon_cli.cmake)
+    set_tests_properties(pruning_epsilon_cli PROPERTIES TIMEOUT 120)
 endif()

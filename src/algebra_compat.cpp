@@ -11,17 +11,18 @@ vec<Mat> homSpace(Mat& A, Mat& B) {
     A.compute_rows_forward();
     return graded_linalg::homomorphism_lift_basis(A, B);
 }
-vec<Mat> End_2d_0(Mat& M, double delta) {
+vec<Mat> End_2epsilon_0(Mat& M, double epsilon) {
     return timed_with_progress("Shifted lifts", [&] {
-        return graded_linalg::shifted_endomorphism_lift_complement(M, {delta, delta}, true);
+        return graded_linalg::shifted_endomorphism_lift_complement(M, pruning_shift(epsilon), true);
     });
 }
+vec<Mat> End_2d_0(Mat& M, double epsilon) { return End_2epsilon_0(M, epsilon); }
 Mat zero_submodule(const Mat& M) { return graded_linalg::zero_submodule(M); }
 Mat all_submodule(const Mat& M) { return graded_linalg::all_submodule(M); }
 Mat submodule_sum(Mat A, Mat B) { return graded_linalg::submodule_sum(A, B); }
 Mat reduce_submodule(Mat& M, Mat& S) { return graded_linalg::reduce_submodule(M, S); }
-Mat shifting_morphism(Mat A, double delta) {
-    return graded_linalg::canonical_shift_lift(A, {delta, delta});
+Mat shifting_morphism(Mat A, double amount) {
+    return graded_linalg::canonical_shift_lift(A, {amount, amount});
 }
 bool image_contained_in_image(const Mat& A, const Mat& B) {
     return graded_linalg::image_contained_in_image(A, B);

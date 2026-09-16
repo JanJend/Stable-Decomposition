@@ -14,7 +14,13 @@ mkdir build && cd build
 cmake ..
 make
 ```
-To build with debug symbols, replace `cmake ..` with `CMAKE_BUILD_TYPE=Debug cmake ..`.
+To build with debug symbols, replace `cmake ..` with `cmake -DCMAKE_BUILD_TYPE=Debug ..`.
+
+`main.cpp` is the entry point; compiled implementations live in `src/` and
+declarations in `include/`. CMake shares the `stable_pruning` library between
+the executable and tests. General algebra now lives in Persistence-Algebra,
+with compatibility adapters here. See [the extraction review](docs/algebra-extraction.md)
+for the full function mapping, behavioral notes, and tests.
 
 ## Usage
 

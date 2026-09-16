@@ -22,8 +22,11 @@ endif()
 
 # Source files
 set(SOURCES 
-    pruning.cpp
-    utils.cpp
+    src/pruning.cpp
+    src/utils.cpp
+    src/algebra_compat.cpp
+    src/delta.cpp
+    src/progress.cpp
 )
 
 # Dependencies
@@ -64,17 +67,20 @@ if(OpenMP_CXX_FOUND)
 endif()
 
 # Main executable
-add_executable(pruning main.cpp ${SOURCES})
+add_library(stable_pruning STATIC ${SOURCES})
+find_package(Threads REQUIRED)
+target_link_libraries(stable_pruning PUBLIC ${Boost_LIBRARIES} Threads::Threads)
+add_executable(pruning main.cpp)
 set_target_properties(pruning PROPERTIES DEBUG_POSTFIX ${CMAKE_DEBUG_POSTFIX})
-target_link_libraries(pruning ${Boost_LIBRARIES})
+target_link_libraries(pruning PRIVATE stable_pruning)
 
 # Tests (optional)
 find_package(doctest QUIET)
 if(doctest_FOUND)
     include(CTest)
     include(doctest)
-    add_executable(tests tests/tests.cpp ${SOURCES})
-    target_link_libraries(tests doctest::doctest ${Boost_LIBRARIES})
+    add_executable(tests tests/tests.cpp tests/algebra_adapters_test.cpp tests/delta_test.cpp)
+    target_link_libraries(tests PRIVATE doctest::doctest stable_pruning)
     doctest_discover_tests(tests WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/tests)
     add_test(NAME pruning_requires_input COMMAND $<TARGET_FILE:pruning>)
     set_tests_properties(pruning_requires_input PROPERTIES WILL_FAIL TRUE)

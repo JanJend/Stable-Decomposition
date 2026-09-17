@@ -1,0 +1,107 @@
+set(work "${CMAKE_CURRENT_BINARY_DIR}/pruning-cli-fixtures")
+file(MAKE_DIRECTORY "${work}")
+set(input "${work}/input with spaces.scc")
+# Two free summands with distinct grades; the zero-epsilon decomposition is unchanged.
+file(WRITE "${input}" "scc2020\n2\n0 2 0\n0 0 ;\n1 1 ;\n")
+set(output "${work}/results/pruned.scc")
+set(extras)
+if(WITH_AIDA)
+    list(APPEND extras --aida)
+endif()
+execute_process(COMMAND "${PRUNING}" --epsilon=0 --hilbert --image-size 128
+    ${extras} "${input}" -o "${output}"
+    RESULT_VARIABLE result OUTPUT_VARIABLE stdout ERROR_VARIABLE stderr TIMEOUT 90)
+if(NOT result EQUAL 0)
+    message(FATAL_ERROR "CLI failed (${result}): ${stdout}\n${stderr}")
+endif()
+file(READ "${output}" scc)
+if(NOT scc MATCHES "^scc2020")
+    message(FATAL_ERROR "Output is not SCC: ${scc}")
+endif()
+foreach(kind input output)
+    set(png "${work}/results/pruned_${kind}_hilbert.png")
+    file(READ "${png}" signature OFFSET 0 LIMIT 8 HEX)
+    if(NOT signature STREQUAL "89504e470d0a1a0a")
+        message(FATAL_ERROR "Invalid PNG: ${png}")
+    endif()
+    if(WITH_AIDA)
+        file(READ "${work}/results/pruned_${kind}_decomposition.sccsum" decomposition)
+        if(NOT decomposition MATCHES "^scc2020sum\n2\n")
+            message(FATAL_ERROR "Expected two AIDA summands: ${decomposition}")
+        endif()
+    endif()
+endforeach()
+if(WITH_AIDA)
+    file(READ "${work}/results/pruned_decomposition_comparison.txt" report)
+    if(NOT report MATCHES "Summands with matching graded Betti signatures: 2")
+        message(FATAL_ERROR "Unexpected comparison: ${report}")
+    endif()
+endif()
+# Round-trip the newly written SCC without writing an additional file.
+execute_process(COMMAND "${PRUNING}" "${output}" --epsilon 0 --no-output
+    RESULT_VARIABLE result OUTPUT_QUIET ERROR_VARIABLE stderr TIMEOUT 30)
+if(NOT result EQUAL 0)
+    message(FATAL_ERROR "SCC round trip failed: ${stderr}")
+endif()
+# Plot the zero module: no logarithms of zero or invalid bounds.
+file(WRITE "${work}/zero.scc" "scc2020\n2\n0 0 0\n")
+execute_process(COMMAND "${PRUNING}" "${work}/zero.scc" -e 0 --hilbert --image-size 128
+    ${extras} -o "${work}/zero-result.scc"
+    RESULT_VARIABLE result OUTPUT_QUIET ERROR_VARIABLE stderr TIMEOUT 30)
+if(NOT result EQUAL 0)
+    message(FATAL_ERROR "Zero module failed: ${stderr}")
+endif()
+execute_process(COMMAND "${PRUNING}" --help RESULT_VARIABLE result OUTPUT_VARIABLE help)
+if(NOT result EQUAL 0 OR NOT help MATCHES "--hilbert" OR NOT help MATCHES "--aida")
+    message(FATAL_ERROR "CLI help is incomplete")
+endif()
+execute_process(COMMAND "${PRUNING}" "${input}" --unknown-option
+    RESULT_VARIABLE result OUTPUT_QUIET ERROR_QUIET)
+if(NOT result EQUAL 1)
+    message(FATAL_ERROR "Unknown option was not rejected")
+endif()
+
+# Exercise both choices through the CLI, including nonempty pruning loops.
+execute_process(COMMAND "${PRUNING}" "${input}" -e 0.5 --old --hilbert --image-size 128
+    ${extras} -o "${work}/old.scc"
+    RESULT_VARIABLE result OUTPUT_QUIET ERROR_VARIABLE stderr TIMEOUT 30)
+if(NOT result EQUAL 0)
+    message(FATAL_ERROR "Matrix CLI failed: ${stderr}")
+endif()
+execute_process(COMMAND "${PRUNING}" "${input}" -e 0.5 --compare --no-output -o "${work}/comparison.scc"
+    RESULT_VARIABLE result OUTPUT_VARIABLE stdout ERROR_VARIABLE stderr TIMEOUT 30)
+if(NOT result EQUAL 0)
+    message(FATAL_ERROR "Comparison CLI failed: ${stdout}\n${stderr}")
+endif()
+file(READ "${work}/comparison_pruning_comparison.txt" comparison)
+foreach(expected "I iterations: matrix=2, module=2" "K iterations: matrix=1, module=1"
+                 "I preimage" "I intersection" "K preimage" "Old avg ms" "New avg ms"
+                 "Generator degree multisets: match" "Relation degree multisets: match"
+                 "matrix: [ (1.5, 1.5) (1.5, 1.5) ]" "module: [ (1.5, 1.5) (1.5, 1.5) ]"
+                 "PASS: checked invariants agree; this does not prove isomorphism.")
+    string(FIND "${comparison}" "${expected}" position)
+    if(position EQUAL -1)
+        message(FATAL_ERROR "Comparison missing '${expected}': ${comparison}")
+    endif()
+endforeach()
+if(WITH_AIDA)
+    foreach(expected "AIDA indecomposable counts: match (matrix=2, module=2)"
+                     "AIDA indecomposable types: match" "free: matrix=2, module=2"
+                     "AIDA indecomposable degree signatures: match")
+        string(FIND "${comparison}" "${expected}" position)
+        if(position EQUAL -1)
+            message(FATAL_ERROR "AIDA comparison missing '${expected}': ${comparison}")
+        endif()
+    endforeach()
+    foreach(kind matrix module)
+        file(READ "${work}/comparison_${kind}_pruning_decomposition.sccsum" decomposition)
+        if(NOT decomposition MATCHES "^scc2020sum\n2\n")
+            message(FATAL_ERROR "Expected two summands in ${kind} pruning output: ${decomposition}")
+        endif()
+    endforeach()
+elseif(NOT comparison MATCHES "AIDA checks skipped")
+    message(FATAL_ERROR "Comparison did not report missing AIDA support")
+endif()
+if(EXISTS "${work}/comparison.scc")
+    message(FATAL_ERROR "--no-output wrote an SCC during comparison")
+endif()

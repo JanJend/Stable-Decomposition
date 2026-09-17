@@ -14,21 +14,35 @@ endif()
 
 set(CMAKE_DEBUG_POSTFIX _debug)
 set(CMAKE_CXX_FLAGS_RELEASE "-DNDEBUG -O3 -flto")
-set(CMAKE_CXX_FLAGS_DEBUG "-D_LIBCPP_ENABLE_ASSERTIONS=1 -D_GLIBCXX_DEBUG -g")
+if(APPLE)
+    set(CMAKE_CXX_FLAGS_DEBUG "-D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_DEBUG -g")
+else()
+    set(CMAKE_CXX_FLAGS_DEBUG "-D_GLIBCXX_DEBUG -g")
+endif()
 
 # Source files
 set(SOURCES 
-    pruning.cpp
-    utils.cpp
+    src/pruning.cpp
+    src/utils.cpp
+    src/algebra_compat.cpp
+    src/epsilon.cpp
+    src/progress.cpp
 )
 
 # Dependencies
 if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.30)
     cmake_policy(SET CMP0167 NEW)
 endif()
-find_package(Boost COMPONENTS timer graph)
-if(NOT ${Boost_FOUND})
-    message(WARNING "Optional dependency Boost not found; please report if build errors occur.")
+find_package(Boost REQUIRED COMPONENTS timer graph)
+
+# Reuse AIDA's parser dependency and call its library directly when available.
+set(AIDA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../AIDA" CACHE PATH "AIDA checkout")
+find_path(CLI11_INCLUDE_DIR CLI11.hpp HINTS "${AIDA_DIR}/include" REQUIRED)
+find_path(STB_INCLUDE_DIR stb_image_write.h
+    HINTS "${CMAKE_CURRENT_SOURCE_DIR}/../Skyscraper-Invariant/include" REQUIRED)
+option(PRUNING_WITH_AIDA "Enable direct AIDA decomposition comparison" ON)
+if(PRUNING_WITH_AIDA)
+    add_subdirectory("${AIDA_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/aida" EXCLUDE_FROM_ALL)
 endif()
 
 # Include directories
@@ -60,16 +74,55 @@ if(OpenMP_CXX_FOUND)
 endif()
 
 # Main executable
-add_executable(pruning main.cpp ${SOURCES})
+add_library(stable_pruning STATIC ${SOURCES})
+find_package(Threads REQUIRED)
+target_link_libraries(stable_pruning PUBLIC ${Boost_LIBRARIES} Threads::Threads)
+target_include_directories(stable_pruning SYSTEM PRIVATE "${CLI11_INCLUDE_DIR}")
+add_library(pruning_cli STATIC src/cli.cpp)
+target_link_libraries(pruning_cli PUBLIC stable_pruning)
+target_include_directories(pruning_cli SYSTEM PRIVATE "${STB_INCLUDE_DIR}")
+if(PRUNING_WITH_AIDA)
+    target_link_libraries(pruning_cli PRIVATE aida_static)
+    target_include_directories(pruning_cli BEFORE PRIVATE "${AIDA_DIR}/include" "${AIDA_DIR}/src")
+    target_compile_definitions(pruning_cli PUBLIC PRUNING_WITH_AIDA=1)
+endif()
+add_executable(pruning main.cpp)
 set_target_properties(pruning PROPERTIES DEBUG_POSTFIX ${CMAKE_DEBUG_POSTFIX})
-target_link_libraries(pruning ${Boost_LIBRARIES})
+target_link_libraries(pruning PRIVATE pruning_cli)
 
 # Tests (optional)
+include(CTest)
+if(BUILD_TESTING)
+    add_test(NAME pruning_cli_outputs COMMAND ${CMAKE_COMMAND}
+        -DPRUNING=$<TARGET_FILE:pruning> -DWITH_AIDA=${PRUNING_WITH_AIDA}
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli_outputs.cmake)
+    set_tests_properties(pruning_cli_outputs PROPERTIES TIMEOUT 180)
+    add_executable(compare_pruning tests/compare_pruning.cpp)
+    target_link_libraries(compare_pruning PRIVATE stable_pruning)
+    target_compile_definitions(compare_pruning PRIVATE
+        PRUNING_TEST_PRESENTATIONS_DIR="${PERSISTENCE_ALGEBRA_DIR}/test_presentations")
+    if(EXISTS "${PERSISTENCE_ALGEBRA_DIR}/test_presentations/toy_example_1.scc")
+        add_test(NAME compare_pruning_zero COMMAND compare_pruning --epsilon 0 toy_example_2.scc)
+        add_test(NAME compare_pruning_examples COMMAND compare_pruning)
+        set_tests_properties(compare_pruning_zero compare_pruning_examples PROPERTIES TIMEOUT 120)
+    endif()
+    if(EXISTS "${PERSISTENCE_ALGEBRA_DIR}/test_presentations/small_pres_with_nonzero_k_min_pres.firep")
+        add_test(NAME compare_pruning_nonzero_k COMMAND compare_pruning --epsilon 0.5
+            small_pres_with_nonzero_k_min_pres.firep)
+        set_tests_properties(compare_pruning_nonzero_k PROPERTIES TIMEOUT 120)
+    endif()
+endif()
 find_package(doctest QUIET)
-if(doctest_FOUND)
+if(BUILD_TESTING AND doctest_FOUND)
     include(CTest)
     include(doctest)
-    add_executable(tests tests/tests.cpp ${SOURCES})
-    target_link_libraries(tests doctest::doctest ${Boost_LIBRARIES})
+    add_executable(tests tests/tests.cpp tests/algebra_adapters_test.cpp tests/epsilon_test.cpp)
+    target_link_libraries(tests PRIVATE doctest::doctest stable_pruning)
     doctest_discover_tests(tests WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/tests)
+    add_test(NAME pruning_requires_input COMMAND $<TARGET_FILE:pruning>)
+    set_tests_properties(pruning_requires_input PROPERTIES WILL_FAIL TRUE)
+    add_test(NAME pruning_epsilon_cli COMMAND ${CMAKE_COMMAND}
+        -DPRUNING=$<TARGET_FILE:pruning> -DINPUT=${CMAKE_SOURCE_DIR}/tests/test1.scc
+        -P ${CMAKE_SOURCE_DIR}/tests/epsilon_cli.cmake)
+    set_tests_properties(pruning_epsilon_cli PROPERTIES TIMEOUT 120)
 endif()

@@ -32,7 +32,7 @@ TEST_CASE("empty additional lift family terminates quick pruning") {
     auto pair = sd::pruning_pair(square, 0, true);
     CHECK(pair.first.data == graded_linalg::array<int>({{0}}));
     CHECK(pair.second.get_num_cols() == 0);
-    auto result = sd::pruning(sd::PModule(square), 0, true);
+    auto result = sd::pruning(sd::Module(square), 0, true);
     CHECK(result.dimension_at({0.5,0.5}) == 1);
     CHECK(result.dimension_at({1,0}) == 0);
 }

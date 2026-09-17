@@ -26,7 +26,7 @@ was removed or updated.
 | --- | --- |
 | `matrix_reduction` | `reduce_matrix_family_modulo` in `matrix_family.hpp` |
 | `homSpace` | `homomorphism_lift_basis`; `module_hom_space_basis` for Hom classes |
-| `End_2d_0` | `shifted_endomorphism_lift_complement` |
+| `End_2d_0` | `End_2d_0` |
 | `zero_submodule`, `all_submodule` | matrix adapters; `Submodule::zero`, `Submodule::whole` |
 | `submodule_sum` | free-target matrix adapter; `Submodule::sum` for a presented parent |
 | `reduce_submodule` | adapter to `Submodule::minimize_generators` |

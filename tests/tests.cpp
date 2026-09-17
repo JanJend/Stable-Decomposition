@@ -17,7 +17,7 @@ TEST_CASE("submodule syzygies preserve ambient coordinates") {
 TEST_CASE("zero-scale pruning preserves a square interval") {
     using namespace stable_decomposition;
     Mat square(2, 1, {{0}, {0}}, {{0,1}, {1,0}}, {{0,0}});
-    PModule result = pruning(PModule(square), 0.0);
+    Module result = pruning(Module(square), 0.0);
     CHECK(result.dimension_at({0,0}) == 1);
     CHECK(result.dimension_at({0.5,0.5}) == 1);
     CHECK(result.dimension_at({1,0}) == 0);
@@ -35,17 +35,17 @@ TEST_CASE("test1.scc") {
     // older generated fixture whose degree-shift convention became stale.
     Mat matrix_input(input);
     Mat matrix_result = pruning(matrix_input, epsilon);
-    PModule module_result = pruning(PModule(input), epsilon);
+    Module module_result = pruning(Module(input), epsilon);
     CHECK(module_result.presentation().row_degrees == matrix_result.row_degrees);
     CHECK(module_result.presentation().col_degrees == matrix_result.col_degrees);
     CHECK(module_result.presentation().data == matrix_result.data);
 
-    auto parent = std::make_shared<PModule>(input);
+    auto parent = std::make_shared<Module>(input);
     auto [I, K] = pruning_pair(parent, epsilon);
     CHECK(I.parent() == parent);
     CHECK(K.parent() == parent);
-    CHECK(I.generators().row_degrees == parent->presentation().row_degrees);
-    CHECK(K.generators().row_degrees == parent->presentation().row_degrees);
+    CHECK(I.generator_map().generator_lift().row_degrees == parent->presentation().row_degrees);
+    CHECK(K.generator_map().generator_lift().row_degrees == parent->presentation().row_degrees);
 
     //TODO F: One cannot really check if P and P_expected present isomorphic modules, because that's a hard problem.
     //        Testing if two matrices span /identical/ submodules or subquotients of a given module should be easier;

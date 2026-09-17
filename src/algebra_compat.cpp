@@ -1,6 +1,7 @@
 #include "algebra_compat.hpp"
 #include "progress.hpp"
 #include <grlina/presentation_operations.hpp>
+#include <grlina/hom_interface.hpp>
 
 namespace stable_decomposition {
 void matrix_reduction(vec<Mat>& A, vec<Mat>& B) {
@@ -13,7 +14,7 @@ vec<Mat> homSpace(Mat& A, Mat& B) {
 }
 vec<Mat> End_2epsilon_0(Mat& M, double epsilon) {
     return timed_with_progress("Shifted lifts", [&] {
-        return graded_linalg::shifted_endomorphism_lift_complement(M, pruning_shift(epsilon), true);
+        return graded_linalg::End_2d_0(M, pruning_shift(epsilon), true);
     });
 }
 vec<Mat> End_2d_0(Mat& M, double epsilon) { return End_2epsilon_0(M, epsilon); }
@@ -31,9 +32,9 @@ bool present_same_submodule(const Mat& M, const Mat& A, const Mat& B) {
     return graded_linalg::present_same_submodule(M, A, B);
 }
 Mat image(const Mat& f, const Mat& A, const Mat& B, const Mat& U) {
-    auto domain = std::make_shared<const PModule>(A);
-    auto target = std::make_shared<const PModule>(B);
+    auto domain = std::make_shared<const Module>(A);
+    auto target = std::make_shared<const Module>(B);
     return graded_linalg::Homomorphism<Mat>(domain, target, f)
-        .image(OwnedSubmodule(domain, U)).generators();
+        .image(Submodule(domain, U)).generator_map().generator_lift();
 }
 } // namespace stable_decomposition

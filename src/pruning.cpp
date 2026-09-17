@@ -13,14 +13,80 @@
 
 #include "pruning.hpp"
 #include <grlina/presentation_operations.hpp>
+#include <grlina/hom_interface.hpp>
 #include <numeric>
 #include <algorithm>
 #include <random>
+#include <stdexcept>
 
 
 namespace stable_decomposition {
 
 using namespace graded_linalg;
+
+// J: I am modularising the pruning function a bit for readability:
+
+graded_linalg::r2degree pruning_shift(double epsilon) {
+    if (!std::isfinite(epsilon) || epsilon < 0 )
+        throw std::invalid_argument("epsilon must be finite and nonnegative");
+    return {2 * epsilon, 2 * epsilon};
+}
+
+/* New algorithm using the module framework*/
+std::pair<Submodule, Submodule> pruning_pair(const Module& X, double epsilon, const bool quick = false) {
+
+  const auto eps_vec = pruning_shift(epsilon);
+  Hom eta = Homomorphism<Mat>::canonical_shift(X, eps_vec);
+
+  auto B = timed_with_progress("Shifted lifts", [&] {
+    return End_2d_0(eta, true);
+  });
+
+ 
+  Submodule I = X.whole_submodule();
+  // The following line is not consistent with the paper: 
+  // I think that "K" should be Ker_2eps.
+  if (B.empty()) return {I, I.zero_submodule()};
+
+  // Compute I
+  int iteration_I = 0;
+  int counter = 0;
+  auto I_ = I;
+  // J: The equality check takes some time here. Is it possible that in our example the submodules really dont change and we can just compare the matrices?
+  while(!(I.equals(I_))){
+    iteration_I++;
+    I_ = I;
+    auto J = eta.image(I); // J: We're performing a matrix multiplication here with an identity matrix - this could be done by manual shifting instead.
+    for(const Hom& f : B){
+      print_progress(iteration_I, ++counter, B.size());
+      I = I.intersection(f.preimage(J), false); // J: Here we compute a kernel twice, use shortcut
+      // Insert Shortcut via f*I
+      I.reduce_generators_lazy();
+    }
+  }
+  print_progress(iteration_I, ++counter, B.size());
+
+  // Compute K
+  Submodule K = I.zero_submodule();
+  int iteration_K = 0;
+  counter = 0;
+  auto K_ = K;
+  while(!(K.equals(K_))){
+    iteration_K++;
+    K_ = K;
+    auto L = eta.image(K);
+    for(const Hom& f : B){
+      print_progress(iteration_K, ++counter, B.size());
+      L = L.sum(f.image(K)); // J: This does some unnecessary copying right now;
+    }
+    K = eta.preimage(L);
+  }
+  print_progress(iteration_K, ++counter, B.size());
+
+  std::cout << iteration_I << " iterations for I, " << iteration_K << " iterations for K" << std::endl;
+  std::cout << "Output is " << std::max(iteration_I, iteration_K)*epsilon << "-interleaved with the input" << std::endl;
+  return {I,K};
+}
 
 std::pair<Mat, Mat> pruning_pair(Mat &M, const double epsilon, const bool quick) {
   // In this function, matrices either represent presentations of modules (relations -> generators),
@@ -34,7 +100,7 @@ std::pair<Mat, Mat> pruning_pair(Mat &M, const double epsilon, const bool quick)
   Mat shifted_module = M;                                      // presentation matrix for M(2ε)
   shifted_module.shift(shift);
   auto B = timed_with_progress("Shifted lifts", [&] {
-    return graded_linalg::shifted_endomorphism_lift_complement(M, shift, true);
+    return graded_linalg::End_2d_0(M, shift, true);
   });
 
   /////////////////////////////////////////////////////////////////////
@@ -223,18 +289,12 @@ Mat pruning(Mat &M, const double epsilon, bool quick) {
   return Pru_M;
 }
 
-std::pair<OwnedSubmodule, OwnedSubmodule> pruning_pair(
-    std::shared_ptr<const PModule> module, const double epsilon, bool quick) {
-  if (!module) throw std::invalid_argument("pruning_pair requires a module");
-  Mat presentation = module->presentation();
-  auto [I, K] = pruning_pair(presentation, epsilon, quick);
-  return {OwnedSubmodule(module, std::move(I)),
-          OwnedSubmodule(module, std::move(K))};
+
+Module pruning(Module X, const double epsilon, bool quick) {
+  auto [I, K] = pruning_pair(X, epsilon, quick);
+  return Module(pruning(presentation, epsilon, quick));
 }
 
-PModule pruning(PModule module, const double epsilon, bool quick) {
-  Mat& presentation = module.mutable_presentation();
-  return PModule(pruning(presentation, epsilon, quick));
-}
+
 
 } // namespace stable_decomposition

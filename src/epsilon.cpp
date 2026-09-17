@@ -7,11 +7,7 @@
 
 namespace stable_decomposition {
 
-graded_linalg::r2degree pruning_shift(double epsilon) {
-    if (!std::isfinite(epsilon) || epsilon < 0 || !std::isfinite(2 * epsilon))
-        throw std::invalid_argument("epsilon must be finite and nonnegative, and 2*epsilon must be finite");
-    return {2 * epsilon, 2 * epsilon};
-}
+
 
 
 std::optional<double> calculate_epsilon_from_matrix(const Mat& M) {

@@ -11,14 +11,14 @@ int main(int argc, char** argv) try {
     auto opts = parse_arguments(argc, argv);
     if (opts.input_file.empty()) return 1;
     
-    PModule M(opts.input_file);
+    stable_decomposition::Module M(opts.input_file);
     M.sort_compatibly();
     const double epsilon = get_epsilon(opts.epsilon, M.presentation());
     
     std::cout << "Computing pruning of " << opts.input_file 
               << " (epsilon=" << epsilon << ", shift=" << 2 * epsilon << ")" << std::endl;
     
-    PModule Pru_M = pruning(std::move(M), epsilon, true);
+    stable_decomposition::Module Pru_M = pruning(std::move(M), epsilon, true);
     
     if (!opts.no_output) {
         std::string output_path = generate_output_path(opts.input_file, epsilon);

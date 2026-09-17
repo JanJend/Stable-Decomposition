@@ -35,7 +35,7 @@ TEST_CASE("epsilon controls the doubled iteration shift and final half shift") {
     CHECK(End_2d_0(births, 0.5)[0].data == additional[0].data);
     for (bool quick : {false, true}) {
         // Below the threshold: I is whole, K=0, and final translation is +epsilon.
-        auto low = pruning(PModule(births), 0.25, quick);
+        auto low = pruning(Module(births), 0.25, quick);
         CHECK(low.presentation().row_degrees == graded_linalg::vec<graded_linalg::r2degree>({{0.25,0.25}, {1.25,1.25}}));
         // At the threshold, invariance under the new map delays the first
         // generator to 1. Both surviving generators then translate to 1.5.
@@ -43,7 +43,7 @@ TEST_CASE("epsilon controls the doubled iteration shift and final half shift") {
         CHECK(pair.second.get_num_cols() == 0);
         Mat expected_I(2, 2, {{0}, {1}}, {{1,1}, {1,1}}, births.row_degrees);
         CHECK(graded_linalg::present_same_submodule(births, pair.first, expected_I));
-        auto high = pruning(PModule(births), 0.5, quick);
+        auto high = pruning(Module(births), 0.5, quick);
         CHECK(high.presentation().row_degrees == graded_linalg::vec<graded_linalg::r2degree>({{1.5,1.5}, {1.5,1.5}}));
         CHECK(high.dimension_at({1.25,1.25}) == 0);
         CHECK(high.dimension_at({1.5,1.5}) == 2);

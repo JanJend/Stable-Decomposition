@@ -37,6 +37,10 @@ Different matrix entries alone do not fail the comparison: bases can differ.
 Matching invariants **do not prove module isomorphism**, even on the full grid.
 No presentation files are modified or written.
 
+It also prints the same detailed iteration/operation timing table as the main
+CLI's `--compare` option, with the usual progress bars enabled.
+Use a Release build for performance comparisons.
+
 Exit codes: **0** for matching checked invariants, **1** for a mismatch, **2** for
 invalid arguments or a caught runtime error. Multiple inputs are all checked
 unless an underlying library assertion or abort terminates the process.

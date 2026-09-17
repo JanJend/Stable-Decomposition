@@ -30,13 +30,21 @@ int main(int argc, char** argv) {
         if ((!options.no_output || options.hilbert || options.aida) && !output_path.parent_path().empty())
             fs::create_directories(output_path.parent_path());
 
-        std::cout << "Computing pruning of " << options.input_file << " (epsilon=" << epsilon
-                  << ", shift=" << 2 * epsilon << ")\n";
-        // Passing by value preserves input for the comparisons below.
-        Module output = pruning(input, epsilon, false);
+        std::cout << "Computing pruning of " << options.input_file << " (epsilon=" << epsilon << ")\n";
+        Module output;
+        if (options.compare) {
+            output = compare_pruning(input, epsilon, output_prefix);
+        } else if (options.old) {
+            Mat presentation = input.presentation(); // Matrix pruning modifies its input.
+            output = Module(pruning(presentation, epsilon, options.quick));
+        } else {
+            output = pruning(input, epsilon, false);
+        }
 
-        if (!options.no_output)
+        if (!options.no_output) {
             write_module(output, output_path);
+            std::cout << "Saved to: " << (options.compare ? output_path.filename() : output_path).string() << '\n';
+        }
         if (options.hilbert)
             write_hilbert_images(input, output, output_prefix, options.image_size);
 #ifdef PRUNING_WITH_AIDA

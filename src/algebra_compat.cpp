@@ -13,7 +13,7 @@ vec<Mat> homSpace(Mat& A, Mat& B) {
     return graded_linalg::homomorphism_lift_basis(A, B);
 }
 vec<Mat> End_2epsilon_0(Mat& M, double epsilon) {
-    return timed_with_progress("Shifted lifts", [&] {
+    return timed_with_progress("End_2eps/0", [&] {
         return graded_linalg::End_2d_0(M, pruning_shift(epsilon), true);
     });
 }

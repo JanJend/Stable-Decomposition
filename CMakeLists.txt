@@ -23,6 +23,7 @@ endif()
 # Source files
 set(SOURCES 
     src/pruning.cpp
+    src/pruning_profiled.cpp
     src/utils.cpp
     src/algebra_compat.cpp
     src/epsilon.cpp

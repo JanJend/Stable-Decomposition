@@ -83,4 +83,61 @@ TEST_CASE("CLI stores epsilon with a historical delta spelling") {
     CHECK(flexible.output_file == "out.scc");
     CHECK_THROWS(parse({"pruning", "input.scc", "--unknown"}));
     CHECK_THROWS(parse({"pruning", "input.scc", "--image-size", "0"}));
+    CHECK(parse({"pruning", "input.scc", "--old"}).old);
+    CHECK(parse({"pruning", "input.scc", "--compare"}).compare);
+    CHECK(parse({"pruning", "input.scc", "--old", "--quick"}).quick);
+    CHECK_THROWS(parse({"pruning", "input.scc", "--old", "--compare"}));
+    CHECK_THROWS(parse({"pruning", "input.scc", "--quick"}));
+}
+
+TEST_CASE("pruning profiles count actual passes and operations without changing results") {
+    using namespace stable_decomposition;
+    Mat births(0, 2, {}, {}, {{0,0}, {1,1}});
+    for (double epsilon : {0.0, 0.5}) {
+        PruningProfile old_profile, new_profile;
+        auto matrix_input = births;
+        Mat old_result = pruning_profiled(matrix_input, epsilon, false, &old_profile);
+        Module new_result = pruning(Module(births), epsilon, false, &new_profile);
+        auto plain_input = births;
+        Mat old_plain = pruning(plain_input, epsilon, false);
+        Module new_plain = pruning(Module(births), epsilon, false);
+        CHECK(old_result.data == old_plain.data);
+        CHECK(old_result.row_degrees == old_plain.row_degrees);
+        CHECK(old_result.col_degrees == old_plain.col_degrees);
+        CHECK(new_result.presentation().data == new_plain.presentation().data);
+        CHECK(new_result.presentation().row_degrees == new_plain.presentation().row_degrees);
+        CHECK(new_result.presentation().col_degrees == new_plain.presentation().col_degrees);
+        const int i_passes = epsilon == 0 ? 0 : 2;
+        const int k_passes = epsilon == 0 ? 0 : 1;
+        for (const auto* p : {&old_profile, &new_profile}) {
+            CHECK(p->total.calls == 1);
+            CHECK(p->basis.calls == 1);
+            CHECK(p->presentation.calls == 1);
+            CHECK(p->minimize.calls == 1);
+            CHECK(p->i_iterations == i_passes);
+            CHECK(p->k_iterations == k_passes);
+            CHECK(p->i_equal.calls == i_passes);
+            CHECK(p->k_equal.calls == k_passes);
+            // This fixture has exactly one additional map when epsilon=0.5.
+            CHECK(p->i_preimage.calls == i_passes);
+            CHECK(p->k_preimage.calls == k_passes);
+            CHECK(p->total.seconds >= p->i_phase.seconds + p->k_phase.seconds);
+        }
+        CHECK(old_profile.i_intersection.calls == 0);
+        CHECK(new_profile.i_intersection.calls == i_passes);
+    }
+}
+
+TEST_CASE("instrumented matrix copy agrees with original on a presented module") {
+    using namespace stable_decomposition;
+    for (double epsilon : {0.01, 0.5}) {
+        Mat original_input("test1.scc");
+        Mat profiled_input = original_input;
+        PruningProfile profile;
+        Mat original = pruning(original_input, epsilon, false);
+        Mat measured = pruning_profiled(profiled_input, epsilon, false, &profile);
+        CHECK(measured.data == original.data);
+        CHECK(measured.row_degrees == original.row_degrees);
+        CHECK(measured.col_degrees == original.col_degrees);
+    }
 }

@@ -93,14 +93,16 @@ bool compare_file(const std::filesystem::path& path, double epsilon, bool quick)
     // copies of exactly the same sorted presentation, without higher resolutions.
     sd::Mat old_input = input;
     std::cout << "Running matrix pruning...\n" << std::flush;
+    sd::PruningProfile old_profile, new_profile;
     auto start = std::chrono::steady_clock::now();
-    sd::Module old_result(sd::pruning(old_input, epsilon, quick));
+    sd::Module old_result(sd::pruning_profiled(old_input, epsilon, quick, &old_profile));
     const double old_seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
     std::cout << "\nRunning module pruning...\n" << std::flush;
     start = std::chrono::steady_clock::now();
-    sd::Module new_result = sd::pruning(sd::Module(input), epsilon, quick);
+    sd::Module new_result = sd::pruning(sd::Module(input), epsilon, quick, &new_profile);
     const double new_seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
     std::cout << "\nRuntime: old=" << old_seconds << " s, new=" << new_seconds << " s\n";
+    sd::print_pruning_comparison(std::cout, old_profile, new_profile);
     old_result.presentation().validate();
     new_result.presentation().validate();
     std::cout << "Presentation validation: PASS\n";

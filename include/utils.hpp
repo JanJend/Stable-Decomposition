@@ -9,6 +9,9 @@ struct ProgramOptions {
     bool no_output = false;
     bool hilbert = false;
     bool aida = false;
+    bool old = false;
+    bool compare = false;
+    bool quick = false;
     int image_size = 500;
 };
 

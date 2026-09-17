@@ -47,6 +47,9 @@ for the full function mapping, behavioral notes, and tests.
 - `--hilbert` - Save Hilbert PNGs for the input and pruned module.
 - `--image-size <pixels>` - Set the heatmap grid size (default 500; range 128–2048, plus margins for labels).
 - `--aida` - Run AIDA directly on both modules and save their decompositions and comparison.
+- `--old` - Use the original matrix pruning instead of the module implementation.
+- `--quick` - With `--old`, enable the original quick algorithm.
+- `--compare` - Run matrix pruning followed by module pruning on independent copies and compare timings and output invariants. AIDA checks run automatically when built in. Both use `quick=false`; the module result is saved. Cannot be combined with `--old`.
 - `--no-output` - Skip the pruned SCC; requested images and AIDA results are still saved.
 - `-h, --help` - Show usage and all options.
 
@@ -66,6 +69,12 @@ Options may appear before or after the input. `--epsilon=0.05` also works.
 
 # Only images, without writing another SCC
 ./build/pruning input.scc -e 0.05 --hilbert --no-output
+
+# Run the original matrix implementation
+./build/pruning input.scc -e 0.05 --old
+
+# Compare the two implementations without writing a pruned SCC
+./build/pruning input.scc -e 0.05 --compare --no-output
 ```
 
 ## Input Format
@@ -84,6 +93,29 @@ With `-o results/pruned.scc`, optional files use the same directory and stem:
 - `pruned_input_hilbert.png` and `pruned_output_hilbert.png`
 - `pruned_input_decomposition.sccsum` and `pruned_output_decomposition.sccsum`
 - `pruned_decomposition_comparison.txt`
+- `pruned_pruning_comparison.txt` with `--compare`
+
+The pruning comparison reports total wall time, I/K iteration counts and average
+time per iteration, and call counts, total time and average time for preimages,
+intersections, images/compositions, sums, generator reductions, convergence
+checks, endomorphism computation, quotient construction, presentation and
+minimization. Progress bars remain enabled in both measured runs; phase and total times include their cost.
+Input preparation, file I/O, images, AIDA and output checks are outside the timers.
+Operation timings include internal library work, so a module intersection's
+internal kernel computations belong to its intersection time. The report also
+compares generator/relation degree multisets after minimizing both outputs with
+the same minimizer. It prints only differing degrees and their multiplicities.
+When built with AIDA, it automatically compares the two pruning results' numbers
+and types of indecomposables, plus their graded Betti signature multiplicities.
+These checks do not write decomposition files. No `--aida` flag is needed;
+that flag separately compares the original input with the final pruned module
+and saves those decompositions. Matching checks do not prove isomorphism; a
+placeholder comment marks where the future isomorphism test belongs. The timing
+and comparison report is saved even with `--no-output`.
+
+The original matrix `pruning_pair` and `pruning` in `src/pruning.cpp` contain no
+profiling code. `src/pruning_profiled.cpp` holds their instrumented copy, used
+only for comparisons; algorithm changes must be kept in sync between the two.
 
 The C++ image renderer lives in `Persistence-Algebra/include/grlina/draw_hf.hpp`.
 Like `visualisation/visualise_reso.py`, it uses a logarithmic light-blue/blue/black

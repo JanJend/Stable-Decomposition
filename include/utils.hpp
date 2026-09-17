@@ -1,13 +1,15 @@
 #pragma once
-
-#include <string>
 #include <optional>
+#include <string>
 
 struct ProgramOptions {
-    std::string input_file;
-    std::optional<double> epsilon;  // None: extract from the input presentation
+    std::string input_file, output_file;
+    std::optional<double> epsilon;
+    bool help = false;
     bool no_output = false;
-    bool no_timers = false;
+    bool hilbert = false;
+    bool aida = false;
+    int image_size = 500;
 };
 
 ProgramOptions parse_arguments(int argc, char** argv);

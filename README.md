@@ -5,19 +5,30 @@ A C++ implementation for computing the pruning of a multiparameter persistence m
 
 ## Overview
 
-This tool reads a presentation matrix from a file, computes the pruning, and optionally saves the result as a minimal presentation matrix.
+This tool reads an SCC module, computes its pruning using the module framework,
+and writes a minimal SCC presentation. Optional flags generate Hilbert function
+images and compare the input/output decompositions using AIDA.
 
 ## Building
-The following builds two binaries `pruning` and `tests` inside the directory `build/`.
+From this directory:
 ```bash
-mkdir build && cd build
-cmake ..
-make
+cmake -S . -B build
+cmake --build build --target pruning -j 2
 ```
-To build with debug symbols, replace `cmake ..` with `cmake -DCMAKE_BUILD_TYPE=Debug ..`.
+Use `-DCMAKE_BUILD_TYPE=Debug` for debug symbols; the executable is then named
+`pruning_debug`. Build the `tests` and `compare_pruning` targets to run the tests.
 
-`main.cpp` is the entry point; compiled implementations live in `src/` and
-declarations in `include/`. CMake shares the `stable_pruning` library between
+The default workspace layout has sibling `Persistence-Algebra`, `AIDA`, and
+`Skyscraper-Invariant` checkouts. The build reuses AIDA's bundled CLI11 parser
+and Skyscraper-Invariant's `stb_image_write.h`; no Python or GUI library is needed.
+Their locations can be overridden with `PERSISTENCE_ALGEBRA_DIR`, `AIDA_DIR`,
+`CLI11_INCLUDE_DIR`, and `STB_INCLUDE_DIR`. Boost is required.
+`-DPRUNING_WITH_AIDA=OFF` omits the AIDA library integration.
+
+`main.cpp` shows the workflow: read the module, choose epsilon, prune, and select
+which outputs to write. Compiled implementations live in `src/` and
+declarations in `include/`. `cli.hpp`/`cli.cpp` handle output, plotting, and AIDA;
+`utils.cpp` defines the options. CMake shares the `stable_pruning` library between
 the executable and tests. General algebra now lives in Persistence-Algebra,
 with compatibility adapters here. See [the extraction review](docs/algebra-extraction.md)
 for the full function mapping, behavioral notes, and tests.
@@ -30,10 +41,16 @@ for the full function mapping, behavioral notes, and tests.
 
 ### Options
 
-- `--epsilon <value>` - Set epsilon (default: 1% of the range of all degrees; fallback 0.01).
+- `-e, --epsilon <value>` - Set epsilon (default: 1% of the largest coordinate extent of all presentation degrees; fallback 0.01).
 - `--delta <value>` - Compatibility alias for `--epsilon`.
-- `--no-output` - Skip saving the output file
-- `--no-timers` - Disable timing output (doesn't work yet)
+- `-o, --output <path>` - Choose the output SCC path; missing directories are created.
+- `--hilbert` - Save Hilbert PNGs for the input and pruned module.
+- `--image-size <pixels>` - Set the heatmap grid size (default 500; range 128–2048, plus margins for labels).
+- `--aida` - Run AIDA directly on both modules and save their decompositions and comparison.
+- `--no-output` - Skip the pruned SCC; requested images and AIDA results are still saved.
+- `-h, --help` - Show usage and all options.
+
+Options may appear before or after the input. `--epsilon=0.05` also works.
 
 ### Examples
 
@@ -44,22 +61,40 @@ for the full function mapping, behavioral notes, and tests.
 # Custom epsilon value
 ./build/pruning input.scc --epsilon 0.05
 
-# Process without saving output
-./build/pruning input.scc --no-output --no-timers
+# SCC output, paired images, and decomposition comparison
+./build/pruning input.scc -e 0.05 --hilbert --aida -o results/pruned.scc
 
-# Combine options
-./build/pruning input.scc --epsilon 0.01 --no-timers
+# Only images, without writing another SCC
+./build/pruning input.scc -e 0.05 --hilbert --no-output
 ```
 
 ## Input Format
 
-The program expects input files in `.scc` - sparse chain complex - format (link to paper).
+The program accepts SCC presentations and projective resolutions supported by
+the Persistence-Algebra module reader.
 
 ## Output
 
-Output files are automatically named with the pattern: `<input_name>_pru<epsilon><extension>`
+Output files are automatically named with the pattern: `<input_name>_pru<epsilon>.scc`
 
 Example: `torus3_largestcomp.scc` → `torus3_largestcomp_pru0.0200.scc`
+
+With `-o results/pruned.scc`, optional files use the same directory and stem:
+
+- `pruned_input_hilbert.png` and `pruned_output_hilbert.png`
+- `pruned_input_decomposition.sccsum` and `pruned_output_decomposition.sccsum`
+- `pruned_decomposition_comparison.txt`
+
+The C++ image renderer lives in `Persistence-Algebra/include/grlina/draw_hf.hpp`.
+Like `visualisation/visualise_reso.py`, it uses a logarithmic light-blue/blue/black
+scale for positive dimensions and white for zero. Both images use the same grid
+and colour scale. Full projective resolutions are computed explicitly before
+evaluating the Hilbert functions, so syzygies are included.
+
+AIDA runs on minimal copies of the input and output. The report compares summand
+counts, types, and multiplicities of generator/relation degree signatures at
+their actual grades, including pruning's final shift. Matching signatures do
+not establish isomorphism; differing decompositions are expected after pruning.
 
 ## Default Behavior
 
@@ -67,8 +102,6 @@ An input file is required. Without `--epsilon`, main extracts epsilon from its
 presentation. The iteration uses the diagonal shift `(2*epsilon, 2*epsilon)`;
 the final result is shifted by `(-epsilon, -epsilon)`. Output filenames record
 epsilon, not its doubled value. Epsilon must be finite and nonnegative.
-
-## Version
 
 ## Version
 

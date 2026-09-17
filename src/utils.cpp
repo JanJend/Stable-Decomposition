@@ -1,4 +1,6 @@
 #include "utils.hpp"
+#include <CLI11.hpp>
+#include <cmath>
 #include <iostream>
 #include <sstream>
 #include <iomanip>
@@ -7,34 +9,29 @@
 
 ProgramOptions parse_arguments(int argc, char** argv) {
     ProgramOptions opts;
-    
-    if (argc < 2) {
-        std::cerr << "Usage: " << argv[0] << " <file_path> [options]\n"
-                  << "Options:\n"
-                  << "  --epsilon <value> Set epsilon (default: 1% of degree extent; fallback 0.01)\n"
-                  << "  --delta <value>   Compatibility alias for --epsilon\n"
-                  << "  --no-output       Skip saving output file\n"
-                  << "  --no-timers       Disable timing output\n";
+    CLI::App app{"Prune a two-parameter persistence module: SCC input -> SCC output."};
+    app.add_option("input", opts.input_file, "Input SCC presentation or projective resolution")->required();
+    app.add_option("-e,--epsilon,--delta", opts.epsilon,
+                   "Nonnegative epsilon (default: 1% of degree extent; fallback 0.01)");
+    app.add_option("-o,--output", opts.output_file, "Output SCC path (default: <input>_pru<epsilon>.scc)");
+    app.add_flag("--hilbert", opts.hilbert, "Save input/output Hilbert PNGs with shared axes and colour scale");
+    app.add_flag("--aida", opts.aida, "Decompose input/output with AIDA; save decompositions and comparison");
+    app.add_option("--image-size", opts.image_size, "Hilbert heatmap size in pixels (default: 500)")
+        ->check(CLI::Range(128, 2048));
+    app.add_flag("--no-output", opts.no_output, "Skip the pruned SCC (optional images/comparison are still saved)");
+    app.footer("Options may appear before or after the input; --option=value is supported.\n"
+               "Example: pruning input.scc -e 0.05 --hilbert --aida -o results/pruned.scc");
+    try {
+        app.parse(argc, argv);
+    } catch (const CLI::CallForHelp&) {
+        std::cout << app.help();
+        opts.help = true;
         return opts;
+    } catch (const CLI::ParseError& error) {
+        throw std::invalid_argument(error.what());
     }
-    
-    opts.input_file = argv[1];
-    
-    for (int i = 2; i < argc; ++i) {
-        std::string arg = argv[i];
-        if (arg == "--no-output" || arg == "-no-output") {
-            opts.no_output = true;
-        } else if (arg == "--no-timers" || arg == "-no-timers") {
-            opts.no_timers = true;
-        } else if (arg == "--epsilon" || arg == "-epsilon" || arg == "--delta" || arg == "-delta") {
-            if (i + 1 >= argc) throw std::invalid_argument("Missing value for epsilon");
-            const std::string value = argv[++i];
-            std::size_t used = 0;
-            opts.epsilon = std::stod(value, &used);
-            if (used != value.size()) throw std::invalid_argument("Invalid epsilon value: " + value);
-        }
-    }
-    
+    if (opts.epsilon && (!std::isfinite(*opts.epsilon) || *opts.epsilon < 0 || !std::isfinite(2 * *opts.epsilon)))
+        throw std::invalid_argument("epsilon and 2*epsilon must be finite and nonnegative");
     return opts;
 }
 
@@ -43,6 +40,6 @@ std::string generate_output_path(const std::string& input, double epsilon) {
     std::ostringstream suffix;
     suffix << "_pru" << std::fixed << std::setprecision(4) << epsilon;
     
-    std::string new_name = p.stem().string() + suffix.str() + p.extension().string();
+    std::string new_name = p.stem().string() + suffix.str() + ".scc";
     return (p.parent_path() / new_name).string();
 }

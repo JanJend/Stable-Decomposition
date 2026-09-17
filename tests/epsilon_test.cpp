@@ -76,4 +76,11 @@ TEST_CASE("CLI stores epsilon with a historical delta spelling") {
     CHECK(parse({"pruning", "input.scc", "--delta", "0.125"}).epsilon.value() == 0.125);
     CHECK_THROWS(parse({"pruning", "input.scc", "--epsilon"}));
     CHECK_THROWS(parse({"pruning", "input.scc", "--epsilon", "0.2junk"}));
+    auto flexible = parse({"pruning", "--epsilon=0.25", "--hilbert", "input.scc", "--aida", "-o", "out.scc"});
+    CHECK(flexible.epsilon.value() == 0.25);
+    CHECK(flexible.hilbert);
+    CHECK(flexible.aida);
+    CHECK(flexible.output_file == "out.scc");
+    CHECK_THROWS(parse({"pruning", "input.scc", "--unknown"}));
+    CHECK_THROWS(parse({"pruning", "input.scc", "--image-size", "0"}));
 }

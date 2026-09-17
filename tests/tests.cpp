@@ -30,9 +30,7 @@ TEST_CASE("test1.scc") {
     std::string input = "test1.scc";
     float epsilon = .01;
 
-    // The module overload must be an owning adapter for the established
-    // matrix algorithm; compare both paths directly rather than relying on an
-    // older generated fixture whose degree-shift convention became stale.
+    // Compare both algorithms on the same fixture.
     Mat matrix_input(input);
     Mat matrix_result = pruning(matrix_input, epsilon);
     Module module_result = pruning(Module(input), epsilon);
@@ -41,7 +39,7 @@ TEST_CASE("test1.scc") {
     CHECK(module_result.presentation().data == matrix_result.data);
 
     auto parent = std::make_shared<Module>(input);
-    auto [I, K] = pruning_pair(parent, epsilon);
+    auto [I, K] = pruning_pair(*parent, epsilon);
     CHECK(I.parent() == parent);
     CHECK(K.parent() == parent);
     CHECK(I.generator_map().generator_lift().row_degrees == parent->presentation().row_degrees);

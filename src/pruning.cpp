@@ -27,65 +27,82 @@ using namespace graded_linalg;
 // J: I am modularising the pruning function a bit for readability:
 
 graded_linalg::r2degree pruning_shift(double epsilon) {
-    if (!std::isfinite(epsilon) || epsilon < 0 )
+    if (!std::isfinite(2 * epsilon) || epsilon < 0 )
         throw std::invalid_argument("epsilon must be finite and nonnegative");
     return {2 * epsilon, 2 * epsilon};
 }
 
 /* New algorithm using the module framework*/
-std::pair<Submodule, Submodule> pruning_pair(const Module& X, double epsilon, const bool quick = false) {
+std::pair<Submodule, Submodule> pruning_pair(const Module& X, double epsilon, const bool quick) {
 
   const auto eps_vec = pruning_shift(epsilon);
-  Hom eta = Homomorphism<Mat>::canonical_shift(X, eps_vec);
+  Hom eta_X = Homomorphism<Mat>::canonical_shift(X, eps_vec);
 
   auto B = timed_with_progress("Shifted lifts", [&] {
-    return End_2d_0(eta, true);
+    return End_2d_0(eta_X, true);
   });
 
  
   Submodule I = X.whole_submodule();
   // The following line is not consistent with the paper: 
   // I think that "K" should be Ker_2eps.
-  if (B.empty()) return {I, I.zero_submodule()};
+  if (B.empty()) return {I, X.zero_submodule()};
 
   // Compute I
   int iteration_I = 0;
   int counter = 0;
-  auto I_ = I;
+  Submodule I_ = X.zero_submodule();
   // J: The equality check takes some time here. Is it possible that in our example the submodules really dont change and we can just compare the matrices?
   while(!(I.equals(I_))){
+    counter = 0;
     iteration_I++;
     I_ = I;
-    auto J = eta.image(I); // J: We're performing a matrix multiplication here with an identity matrix - this could be done by manual shifting instead.
+    auto J = eta_X.image(I); 
     for(const Hom& f : B){
       print_progress(iteration_I, ++counter, B.size());
       I = I.intersection(f.preimage(J), false); // J: Here we compute a kernel twice, use shortcut
       // Insert Shortcut via f*I
       I.reduce_generators_lazy();
     }
+    
   }
-  print_progress(iteration_I, ++counter, B.size());
+  print_progress(iteration_I, counter, B.size());
 
   // Compute K
-  Submodule K = I.zero_submodule();
+  Submodule K = X.zero_submodule();
   int iteration_K = 0;
-  counter = 0;
-  auto K_ = K;
+  
+  Submodule K_ = X.whole_submodule();
   while(!(K.equals(K_))){
+    counter = 0;
     iteration_K++;
     K_ = K;
-    auto L = eta.image(K);
+    auto L = eta_X.image(K);
     for(const Hom& f : B){
       print_progress(iteration_K, ++counter, B.size());
       L = L.sum(f.image(K)); // J: This does some unnecessary copying right now;
     }
-    K = eta.preimage(L);
+    // There is currently a difference here to the algorithm in the paper: 
+    // eta_X i sused instead of eta_I, which means that K is not a submodule of I
+    // I am mostly sure that this doesnt change anything.
+    K = eta_X.preimage(L);
   }
-  print_progress(iteration_K, ++counter, B.size());
+  print_progress(iteration_K, counter, B.size());
 
   std::cout << iteration_I << " iterations for I, " << iteration_K << " iterations for K" << std::endl;
   std::cout << "Output is " << std::max(iteration_I, iteration_K)*epsilon << "-interleaved with the input" << std::endl;
   return {I,K};
+}
+
+Module pruning(Module X, const double epsilon, bool quick) {
+  auto parent = std::make_shared<Module>(std::move(X));
+  auto [I, K] = pruning_pair(*parent, epsilon, quick);
+  auto I_qK = I.submodule_quotient(K);
+  I_qK.compute_presentation();
+  Module result = std::move(I_qK);
+  result.minimize();
+  result.shift({-epsilon, -epsilon});
+  return result;
 }
 
 std::pair<Mat, Mat> pruning_pair(Mat &M, const double epsilon, const bool quick) {
@@ -290,10 +307,7 @@ Mat pruning(Mat &M, const double epsilon, bool quick) {
 }
 
 
-Module pruning(Module X, const double epsilon, bool quick) {
-  auto [I, K] = pruning_pair(X, epsilon, quick);
-  return Module(pruning(presentation, epsilon, quick));
-}
+
 
 
 

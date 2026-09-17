@@ -95,7 +95,7 @@ bool compare_file(const std::filesystem::path& path, double epsilon, bool quick)
     std::cout << "Running matrix pruning...\n" << std::flush;
     sd::PruningProfile old_profile, new_profile;
     auto start = std::chrono::steady_clock::now();
-    sd::Module old_result(sd::pruning(old_input, epsilon, quick, &old_profile));
+    sd::Module old_result(sd::pruning_profiled(old_input, epsilon, quick, &old_profile));
     const double old_seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
     std::cout << "\nRunning module pruning...\n" << std::flush;
     start = std::chrono::steady_clock::now();

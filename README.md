@@ -99,20 +99,23 @@ The pruning comparison reports total wall time, I/K iteration counts and average
 time per iteration, and call counts, total time and average time for preimages,
 intersections, images/compositions, sums, generator reductions, convergence
 checks, endomorphism computation, quotient construction, presentation and
-minimization. Per-map progress printing is disabled in both measured runs.
+minimization. Progress bars remain enabled in both measured runs; phase and total times include their cost.
 Input preparation, file I/O, images, AIDA and output checks are outside the timers.
 Operation timings include internal library work, so a module intersection's
 internal kernel computations belong to its intersection time. The report also
 compares generator/relation degree multisets after minimizing both outputs with
-the same minimizer, and lists the sorted degrees including multiplicities.
+the same minimizer. It prints only differing degrees and their multiplicities.
 When built with AIDA, it automatically compares the two pruning results' numbers
 and types of indecomposables, plus their graded Betti signature multiplicities.
-These decompositions are saved as `pruned_matrix_pruning_decomposition.sccsum`
-and `pruned_module_pruning_decomposition.sccsum`. No `--aida` flag is needed for
-these checks; that flag separately compares the original input with the final
-pruned module. Matching checks do not prove isomorphism; a placeholder comment
-marks where the future isomorphism test belongs. Reports and decompositions are
-saved even with `--no-output`.
+These checks do not write decomposition files. No `--aida` flag is needed;
+that flag separately compares the original input with the final pruned module
+and saves those decompositions. Matching checks do not prove isomorphism; a
+placeholder comment marks where the future isomorphism test belongs. The timing
+and comparison report is saved even with `--no-output`.
+
+The original matrix `pruning_pair` and `pruning` in `src/pruning.cpp` contain no
+profiling code. `src/pruning_profiled.cpp` holds their instrumented copy, used
+only for comparisons; algorithm changes must be kept in sync between the two.
 
 The C++ image renderer lives in `Persistence-Algebra/include/grlina/draw_hf.hpp`.
 Like `visualisation/visualise_reso.py`, it uses a logarithmic light-blue/blue/black

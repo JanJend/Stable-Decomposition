@@ -27,7 +27,6 @@ std::ofstream output_file(const fs::path& path) {
 void write_module(const Module& module, const fs::path& path) {
     auto out = output_file(path);
     module.to_stream(out);
-    std::cout << "Saved to: " << path.string() << '\n';
 }
 
 
@@ -74,7 +73,7 @@ struct Decomposition {
     std::map<std::string,int> types, signatures;
 };
 
-Decomposition decompose(const Module& module, const fs::path& path) {
+Decomposition decompose(const Module& module, const fs::path& path = {}) {
     Decomposition result;
     Module working(module.presentation());
     working.minimize(); // AIDA requires a minimal presentation.
@@ -85,12 +84,17 @@ Decomposition decompose(const Module& module, const fs::path& path) {
         decomposer.config.sort = true;
         decomposer(working,result.blocks);
     }
-    auto file = output_file(path);
-    file << "scc2020sum\n" << result.blocks.size() << '\n';
+    std::ofstream file;
+    if (!path.empty()) {
+        file = output_file(path);
+        file << "scc2020sum\n" << result.blocks.size() << '\n';
+    }
     for (auto& block : result.blocks) {
         ++result.types[block.get_type()];
-        file << '\n' << block.get_type() << '\n';
-        block.to_stream_r2(file);
+        if (!path.empty()) {
+            file << '\n' << block.get_type() << '\n';
+            block.to_stream_r2(file);
+        }
         Module summand(static_cast<const Mat&>(block));
         summand.minimize();
         // Compare graded Betti signatures, not coefficient matrices or presumed
@@ -151,12 +155,11 @@ Module compare_pruning(const Module& input, double epsilon, const fs::path& pref
     Module new_input(input.presentation());
     PruningProfile old_profile, new_profile;
     std::cout << "Running matrix pruning...\n" << std::flush;
-    Module old_output(pruning(old_input, epsilon, false, &old_profile));
+    Module old_output(pruning_profiled(old_input, epsilon, false, &old_profile));
     std::cout << "Running module pruning...\n" << std::flush;
     Module new_output = pruning(std::move(new_input), epsilon, false, &new_profile);
 
     std::ostringstream report;
-    report << "Both implementations use quick=false.\n";
     print_pruning_comparison(report, old_profile, new_profile);
     // Normalize copies with the same minimizer; all checks are outside pruning timers.
     Module old_checked(old_output.presentation()), new_checked(new_output.presentation());
@@ -164,58 +167,63 @@ Module compare_pruning(const Module& input, double epsilon, const fs::path& pref
     new_checked.minimize();
     const auto& old_p = old_checked.presentation();
     const auto& new_p = new_checked.presentation();
-    auto compare_degrees = [&](const char* label, auto a, auto b) {
-        std::sort(a.begin(), a.end());
-        std::sort(b.begin(), b.end());
-        report << label << " degree multisets: " << (a == b ? "match" : "DIFFER") << '\n';
-        report << std::setprecision(17);
-        for (const auto& entry : {std::make_pair("matrix", &a), std::make_pair("module", &b)}) {
-            report << "  " << entry.first << ": [";
-            for (const auto& d : *entry.second) report << " (" << d.first << ", " << d.second << ')';
-            report << " ]\n";
-        }
-        return a == b;
+    auto compare_degrees = [&](const char* label, const auto& a, const auto& b) {
+        std::map<graded_linalg::r2degree, std::pair<std::size_t, std::size_t>> counts;
+        for (const auto& d : a) ++counts[d].first;
+        for (const auto& d : b) ++counts[d].second;
+        const bool same = std::all_of(counts.begin(), counts.end(), [](const auto& entry) {
+            return entry.second.first == entry.second.second;
+        });
+        report << label << " degrees: " << (same ? "match" : "DIFFER") << '\n';
+        for (const auto& entry : counts) if (entry.second.first != entry.second.second)
+            report << std::setprecision(17) << "  (" << entry.first.first << ", " << entry.first.second
+                   << "): matrix=" << entry.second.first << ", module=" << entry.second.second << '\n';
+        return same;
     };
-    report << "Minimized output generators: matrix=" << old_p.get_num_rows() << ", module=" << new_p.get_num_rows()
-           << "; relations: matrix=" << old_p.get_num_cols() << ", module=" << new_p.get_num_cols() << '\n';
     bool match = compare_degrees("Generator", old_p.row_degrees, new_p.row_degrees);
     match = compare_degrees("Relation", old_p.col_degrees, new_p.col_degrees) && match;
 #ifdef PRUNING_WITH_AIDA
-    const auto old_path = prefix.string() + "_matrix_pruning_decomposition.sccsum";
-    const auto new_path = prefix.string() + "_module_pruning_decomposition.sccsum";
     std::cout << "Running AIDA on both pruning results...\n" << std::flush;
-    const auto old_decomposition = decompose(old_checked, old_path);
-    const auto new_decomposition = decompose(new_checked, new_path);
+    const auto old_decomposition = decompose(old_checked);
+    const auto new_decomposition = decompose(new_checked);
     const bool counts_match = old_decomposition.blocks.size() == new_decomposition.blocks.size();
     const bool types_match = old_decomposition.types == new_decomposition.types;
     const bool signatures_match = old_decomposition.signatures == new_decomposition.signatures;
-    report << "AIDA indecomposable counts: " << (counts_match ? "match" : "DIFFER")
-           << " (matrix=" << old_decomposition.blocks.size() << ", module=" << new_decomposition.blocks.size() << ")\n"
-           << "AIDA indecomposable types: " << (types_match ? "match" : "DIFFER") << '\n';
-    auto types = old_decomposition.types;
-    types.insert(new_decomposition.types.begin(), new_decomposition.types.end());
-    for (const auto& entry : types) {
-        auto count = [&](const auto& decomposition) {
-            auto found = decomposition.types.find(entry.first);
-            return found == decomposition.types.end() ? 0 : found->second;
-        };
-        report << "  " << entry.first << ": matrix=" << count(old_decomposition)
-               << ", module=" << count(new_decomposition) << '\n';
+    if (counts_match && types_match && signatures_match) {
+        report << "AIDA: match; " << old_decomposition.blocks.size() << " indecomposables (";
+        const char* separator = "";
+        for (const auto& entry : old_decomposition.types) {
+            report << separator << entry.second << ' ' << entry.first;
+            separator = ", ";
+        }
+        report << "); degree signatures match.\n";
+    } else {
+        report << "AIDA: DIFFER; indecomposables matrix=" << old_decomposition.blocks.size()
+               << ", module=" << new_decomposition.blocks.size() << '\n';
+        auto types = old_decomposition.types;
+        types.insert(new_decomposition.types.begin(), new_decomposition.types.end());
+        for (const auto& entry : types) {
+            auto count = [&](const auto& decomposition) {
+                auto found = decomposition.types.find(entry.first);
+                return found == decomposition.types.end() ? 0 : found->second;
+            };
+            if (count(old_decomposition) != count(new_decomposition))
+                report << "  " << entry.first << ": matrix=" << count(old_decomposition)
+                       << ", module=" << count(new_decomposition) << '\n';
+        }
+        report << "  Degree signatures: " << (signatures_match ? "match" : "DIFFER") << '\n';
     }
-    report << "AIDA indecomposable degree signatures: " << (signatures_match ? "match" : "DIFFER") << '\n'
-           << "Saved decompositions: " << old_path << "\n                      " << new_path << '\n';
     match = match && counts_match && types_match && signatures_match;
 #else
-    report << "AIDA checks skipped: this executable was built without AIDA.\n";
+    report << "AIDA: unavailable.\n";
 #endif
     // TODO: Add a module isomorphism test between old_checked and new_checked when available.
-    report << (match ? "PASS: checked invariants agree; this does not prove isomorphism.\n"
-                     : "FAIL: pruning results disagree on checked invariants.\n")
-           << "The module result is used for subsequent outputs.\n";
-    const auto path = prefix.string() + "_pruning_comparison.txt";
+    report << (match ? "Checks passed. " : "Checks FAILED. ") << "Isomorphism untested.\n";
+    const fs::path path = prefix.string() + "_pruning_comparison.txt";
     auto file = output_file(path);
     file << report.str();
-    std::cout << report.str() << "Saved comparison: " << path << '\n';
+    std::cout << report.str() << "Output directory: " << fs::absolute(path).parent_path().string()
+              << "\nSaved comparison: " << path.filename().string() << '\n';
     return new_output;
 }
 

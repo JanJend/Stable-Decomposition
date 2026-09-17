@@ -18,13 +18,16 @@ Module pruning(Module module, double epsilon, bool quick = false, PruningProfile
 /** Compute the epsilon-pruning pair using M(2 epsilon) and its structure map.
  * Matrix columns use the parent's F0 basis. Epsilon is finite and nonnegative.
  */
-std::pair<Mat, Mat> pruning_pair(Mat& M, double epsilon, bool quick = false, PruningProfile* profile = nullptr);
+std::pair<Mat, Mat> pruning_pair(Mat& M, double epsilon, bool quick = false);
 
 
 /** Return (I/K)(-epsilon): the final translation is half the iteration shift.
  * The legacy matrix overload remains available.
  */
-Mat pruning(Mat& M, double epsilon, bool quick = false, PruningProfile* profile = nullptr);
+Mat pruning(Mat& M, double epsilon, bool quick = false);
+
+// Separate diagnostic copy; the original matrix implementation stays uninstrumented.
+Mat pruning_profiled(Mat& M, double epsilon, bool quick, PruningProfile* profile);
 
 
 } // namespace stable_decomposition

@@ -41,8 +41,10 @@ int main(int argc, char** argv) {
             output = pruning(input, epsilon, false);
         }
 
-        if (!options.no_output)
+        if (!options.no_output) {
             write_module(output, output_path);
+            std::cout << "Saved to: " << (options.compare ? output_path.filename() : output_path).string() << '\n';
+        }
         if (options.hilbert)
             write_hilbert_images(input, output, output_prefix, options.image_size);
 #ifdef PRUNING_WITH_AIDA

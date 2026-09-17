@@ -1,124 +1,16 @@
-
-
-/**
- * @file pruning.cpp
- * @author Havard Bjerkevik, Jan Jendrysiak, and Fabian Lenzen
- * @brief
- * @version 0.2
- * @date 2025-10-6
- *
- * @copyright
- *
- */
-
+// Instrumented copy of matrix pruning. Keep the algorithm in sync with pruning.cpp.
 #include "pruning.hpp"
-#include <grlina/presentation_operations.hpp>
 #include <grlina/hom_interface.hpp>
-#include <numeric>
+#include <grlina/presentation_operations.hpp>
 #include <algorithm>
+#include <numeric>
 #include <random>
-#include <stdexcept>
-
 
 namespace stable_decomposition {
-
 using namespace graded_linalg;
+namespace {
 
-// J: I am modularising the pruning function a bit for readability:
-
-graded_linalg::r2degree pruning_shift(double epsilon) {
-    if (!std::isfinite(2 * epsilon) || epsilon < 0 )
-        throw std::invalid_argument("epsilon must be finite and nonnegative");
-    return {2 * epsilon, 2 * epsilon};
-}
-
-/* New algorithm using the module framework*/
-std::pair<Submodule, Submodule> pruning_pair(const Module& X, double epsilon, const bool quick, PruningProfile* profile) {
-
-  const auto eps_vec = pruning_shift(epsilon);
-  Hom eta_X = Homomorphism<Mat>::canonical_shift(X, eps_vec);
-
-  auto B = measure(profile, &PruningProfile::basis, [&] {
-    return timed_with_progress("End_2eps/0", [&] { return End_2d_0(eta_X, true); });
-  });
-
- 
-  Submodule I = X.whole_submodule();
-  // The following line is not consistent with the paper: 
-  // I think that "K" should be Ker_2eps.
-  if (B.empty()) return {I, X.zero_submodule()};
-
-  // Compute I
-  int iteration_I = 0;
-  int counter = 0;
-  {
-  PruningTimer phase(profile ? &profile->i_phase : nullptr);
-  for (;;) {
-    counter = 0;
-    iteration_I++;
-    if (profile) ++profile->i_iterations;
-    const Submodule I_ = I;
-    auto J = measure(profile, &PruningProfile::i_image, [&] { return eta_X.image(I); });
-    for(const Hom& f : B){
-      print_progress(iteration_I, ++counter, B.size());
-      auto preimage = measure(profile, &PruningProfile::i_preimage, [&] { return f.preimage(J); });
-      I = measure(profile, &PruningProfile::i_intersection, [&] { return I.intersection(preimage, false); });
-      measure(profile, &PruningProfile::i_reduce, [&] { I.minimize_generators(); });
-    }
-    print_progress(iteration_I, counter, B.size());
-    std::cout << std::endl;
-    // I decreases, so only the reverse containment needs checking.
-    if (measure(profile, &PruningProfile::i_equal, [&] { return I.contains(I_); })) break;
-  }
-  }
-
-  // Compute K
-  Submodule K = X.zero_submodule();
-  int iteration_K = 0;
-  
-  {
-  PruningTimer phase(profile ? &profile->k_phase : nullptr);
-  for (;;) {
-    counter = 0;
-    iteration_K++;
-    if (profile) ++profile->k_iterations;
-    const Submodule K_ = K;
-    auto L = measure(profile, &PruningProfile::k_image, [&] { return eta_X.image(K); });
-    for(const Hom& f : B){
-      print_progress(iteration_K, ++counter, B.size());
-      auto image = measure(profile, &PruningProfile::k_image, [&] { return f.image(K); });
-      L = measure(profile, &PruningProfile::k_sum, [&] { return L.sum(image); });
-    }
-    // There is currently a difference here to the algorithm in the paper: 
-    // eta_X i sused instead of eta_I, which means that K is not a submodule of I
-    // I am mostly sure that this doesnt change anything.
-    K = measure(profile, &PruningProfile::k_preimage, [&] { return eta_X.preimage(L); });
-    print_progress(iteration_K, counter, B.size());
-    std::cout << std::endl;
-    // K increases: eta_X(K_) is included in L before taking its preimage.
-    if (measure(profile, &PruningProfile::k_equal, [&] { return K_.contains(K); })) break;
-  }
-  }
-
-  std::cout << iteration_I << " iterations for I, " << iteration_K << " iterations for K" << std::endl;
-  std::cout << "Output is " << std::max(iteration_I, iteration_K)*epsilon << "-interleaved with the input" << std::endl;
-  return {I,K};
-}
-
-Module pruning(Module X, const double epsilon, bool quick, PruningProfile* profile) {
-  if (profile) *profile = {};
-  PruningTimer total(profile ? &profile->total : nullptr);
-  auto parent = std::make_shared<Module>(std::move(X));
-  auto [I, K] = pruning_pair(*parent, epsilon, quick, profile);
-  auto I_qK = measure(profile, &PruningProfile::quotient, [&I = I, &K = K] { return I.submodule_quotient(K); });
-  measure(profile, &PruningProfile::presentation, [&] { I_qK.compute_presentation(); });
-  Module result = std::move(I_qK);
-  measure(profile, &PruningProfile::minimize, [&] { result.minimize(); });
-  result.shift({-epsilon, -epsilon});
-  return result;
-}
-
-std::pair<Mat, Mat> pruning_pair(Mat &M, const double epsilon, const bool quick) {
+std::pair<Mat, Mat> pruning_pair_profiled(Mat &M, const double epsilon, const bool quick, PruningProfile* profile) {
   // In this function, matrices either represent presentations of modules (relations -> generators),
   // or generators of a submodule (generators of submodule -> generators of module).
   // Therefore, matrices representing submodules only make sense w.r.t. an ambient module,
@@ -129,8 +21,8 @@ std::pair<Mat, Mat> pruning_pair(Mat &M, const double epsilon, const bool quick)
   const auto shift = pruning_shift(epsilon);
   Mat shifted_module = M;                                      // presentation matrix for M(2ε)
   shifted_module.shift(shift);
-  auto B = timed_with_progress("End_2eps/0", [&] {
-    return graded_linalg::End_2d_0(M, shift, true);
+  auto B = measure(profile, &PruningProfile::basis, [&] {
+    return timed_with_progress("End_2eps/0", [&] { return graded_linalg::End_2d_0(M, shift, true); });
   });
 
   /////////////////////////////////////////////////////////////////////
@@ -158,7 +50,10 @@ std::pair<Mat, Mat> pruning_pair(Mat &M, const double epsilon, const bool quick)
   size_t last_changed_iteration = B.size() - 1;
   bool done = false;
   Mat I_new = I;                                  // Iᵢ₊₁ = ⋂_f f⁻¹(sh(Iᵢ, 2ε)),
+  {
+  PruningTimer phase(profile ? &profile->i_phase : nullptr);
   for (;;) {
+    if (profile) ++profile->i_iterations;
     assert(I.row_degrees == M.row_degrees);
     size_t idx = 0;
     Mat canI;
@@ -166,22 +61,22 @@ std::pair<Mat, Mat> pruning_pair(Mat &M, const double epsilon, const bool quick)
       canI = I_new;                               // generators of can(Iᵢ) ⊆ M(2ε)
                                                     //TODO F: Is it generators of can(I) \subseteq M or I \subseteq M(2ε)?
       canI.shift_generators(shift);
-      canI = graded_linalg::reduce_submodule(shifted_module, canI);
+      canI = measure(profile, &PruningProfile::i_reduce, [&] { return graded_linalg::reduce_submodule(shifted_module, canI); });
     }
     //for (size_t idx = 0; const auto &f : B) {
     for (size_t counter = 0; counter < B.size(); counter++) {
       print_progress(iteration_I, ++idx, B.size());
       Mat& f = B[B_indices[counter]];
-      Mat foI = f * I_new;                          // generators of f(Iᵢ) ⊆ M(2ε)
+      Mat foI = measure(profile, &PruningProfile::i_image, [&] { return f * I_new; });                          // generators of f(Iᵢ) ⊆ M(2ε)
       if(quick){
         canI = I_new;                               // generators of can(Iᵢ) ⊆ M(2ε)
                                                       //TODO F: Is it generators of can(I) \subseteq M or I \subseteq M(2ε)?
         canI.shift_generators(shift);
-        canI = graded_linalg::reduce_submodule(shifted_module, canI);
+        canI = measure(profile, &PruningProfile::i_reduce, [&] { return graded_linalg::reduce_submodule(shifted_module, canI); });
       }
-      Mat inv = foI.inverse_image(shifted_module, canI); // generators of f⁻¹(can(Iᵢ)) ⊆ I
-      Mat I_newxinv = I_new * inv;
-      I_new = graded_linalg::reduce_submodule(M, I_newxinv);     // generators of f⁻¹(can(Iᵢ)) ⊆ M
+      Mat inv = measure(profile, &PruningProfile::i_preimage, [&] { return foI.inverse_image(shifted_module, canI); }); // generators of f⁻¹(can(Iᵢ)) ⊆ I
+      Mat I_newxinv = measure(profile, &PruningProfile::i_image, [&] { return I_new * inv; });
+      I_new = measure(profile, &PruningProfile::i_reduce, [&] { return graded_linalg::reduce_submodule(M, I_newxinv); });     // generators of f⁻¹(can(Iᵢ)) ⊆ M
                                                     // H: without reduce_submodule, this gets suuuper slow
                                                     //TODO F: How can that be, shouldn't inverse image reduce?
       // Break if we have gone one full run through all f without any change.
@@ -189,7 +84,7 @@ std::pair<Mat, Mat> pruning_pair(Mat &M, const double epsilon, const bool quick)
       if(quick && (B.size() - 1 - counter) % one_fifth == 0){
         Mat MI_new = M;
         MI_new.append_matrix(I_new);
-        if(!graded_linalg::image_contained_in_image(last_changed_I_new, MI_new)){
+        if(!measure(profile, &PruningProfile::i_equal, [&] { return graded_linalg::image_contained_in_image(last_changed_I_new, MI_new); })){
           last_changed_I_new = I_new;
           last_changed_iteration = counter;
           continue;
@@ -213,7 +108,7 @@ std::pair<Mat, Mat> pruning_pair(Mat &M, const double epsilon, const bool quick)
     }
     Mat MI_new = M;
     MI_new.append_matrix(I_new);
-    if(graded_linalg::image_contained_in_image(I, MI_new)){
+    if(measure(profile, &PruningProfile::i_equal, [&] { return graded_linalg::image_contained_in_image(I, MI_new); })){
       break;
     }
     /* H: Could add the following check
@@ -230,6 +125,7 @@ std::pair<Mat, Mat> pruning_pair(Mat &M, const double epsilon, const bool quick)
     iteration_I++;
   }
 
+  }
   /////////////////////////////////////////////////////////////////////
   ////////// Build the module K from the pruning pair (I,K) //////////
   /////////////////////////////////////////////////////////////////////
@@ -241,7 +137,10 @@ std::pair<Mat, Mat> pruning_pair(Mat &M, const double epsilon, const bool quick)
   int iteration_K = 1;
   Mat last_changed_K_new = K;
   last_changed_iteration = B.size() - 1;
+  {
+  PruningTimer phase(profile ? &profile->k_phase : nullptr);
   for (;;) {
+    if (profile) ++profile->k_iterations;
     size_t idx = 0;
     assert(K.row_degrees == M.row_degrees);
     //TODO F: I changed the implementation slightly, because it was taking not sh⁻¹(f(Kᵢ), 2ε), but sh⁻¹(f([summation so far]), 2ε)
@@ -254,24 +153,24 @@ std::pair<Mat, Mat> pruning_pair(Mat &M, const double epsilon, const bool quick)
       Mat& f = B[B_indices[counter]];
       Mat S;
       if(quick){
-        S = f * K_new;
+        S = measure(profile, &PruningProfile::k_image, [&] { return f * K_new; });
       }else{
-        S = f * K;                                    // generators of f(Kᵢ) ⊆ M(2ε)
+        S = measure(profile, &PruningProfile::k_image, [&] { return f * K; });                                    // generators of f(Kᵢ) ⊆ M(2ε)
       }
       canI = I;                                    // generators of can(I) ⊆ M(2ε)
       canI.shift_generators(shift);
-      S = canI.inverse_image(shifted_module, S);          // generators of sh⁻¹(f(Kᵢ), 2ε) ⊆ I
+      S = measure(profile, &PruningProfile::k_preimage, [&] { return canI.inverse_image(shifted_module, S); });          // generators of sh⁻¹(f(Kᵢ), 2ε) ⊆ I
                                           // H: I'd like to use inverse_image_copy to avoid redefining
                                           // canI every loop, but iic doesn't compile.
-      S = I * S;                                    // generators of sh⁻¹(f(Kᵢ), 2ε) ⊆ M
-      K_new.append_matrix(S);                       // K_{i+1} \coloneqq K_{}
-      K_new = graded_linalg::reduce_submodule(M, K_new);
+      S = measure(profile, &PruningProfile::k_image, [&] { return I * S; });                                    // generators of sh⁻¹(f(Kᵢ), 2ε) ⊆ M
+      measure(profile, &PruningProfile::k_sum, [&] { K_new.append_matrix(S); });                       // K_{i+1} \coloneqq K_{}
+      K_new = measure(profile, &PruningProfile::k_reduce, [&] { return graded_linalg::reduce_submodule(M, K_new); });
       // Break if we have gone one full run through all f without any change.
       // Check 5 times per run through B (5 is completely arbitrary)
       if(quick && (B.size() - 1 - counter) % one_fifth == 0){
         Mat Mlast = M;
         Mlast.append_matrix(last_changed_K_new);
-        if(!graded_linalg::image_contained_in_image(K_new, Mlast)){
+        if(!measure(profile, &PruningProfile::k_equal, [&] { return graded_linalg::image_contained_in_image(K_new, Mlast); })){
           last_changed_K_new = K_new;
           last_changed_iteration = counter;
           continue;
@@ -283,7 +182,7 @@ std::pair<Mat, Mat> pruning_pair(Mat &M, const double epsilon, const bool quick)
         }
       }
     }
-    K_new = graded_linalg::reduce_submodule(M, K_new);
+    K_new = measure(profile, &PruningProfile::k_reduce, [&] { return graded_linalg::reduce_submodule(M, K_new); });
     print_progress(iteration_K, idx, B.size());
     std::cout << std::endl;
     if(quick){
@@ -295,33 +194,35 @@ std::pair<Mat, Mat> pruning_pair(Mat &M, const double epsilon, const bool quick)
     }
     Mat MK = M;
     MK.append_matrix(K);
-    if(graded_linalg::image_contained_in_image(K_new, MK))
+    if(measure(profile, &PruningProfile::k_equal, [&] { return graded_linalg::image_contained_in_image(K_new, MK); }))
     //if (graded_linalg::present_same_submodule(M, K_new, K))
       break;
     std::swap(K, K_new);
     iteration_K++;
   }
+  }
   std::cout << iteration_I << " iterations for I, " << iteration_K << " iterations for K" << std::endl;
   return {I, K};
 }
 
-Mat pruning(Mat &M, const double epsilon, bool quick) {
-  auto [I, K] = pruning_pair(M, epsilon, quick);         // generators for I ⊆ M and K ⊆ M
+} // namespace
+
+Mat pruning_profiled(Mat &M, const double epsilon, bool quick, PruningProfile* profile) {
+  if (profile) *profile = {};
+  PruningTimer total(profile ? &profile->total : nullptr);
+  auto [I, K] = pruning_pair_profiled(M, epsilon, quick, profile);         // generators for I ⊆ M and K ⊆ M
   //Mat K_module = K.presentation_of_submodule(M);
   //return K_module;
-  M.append_matrix(K);                           // presentation for M / K
-  Mat Pru_M = I.presentation_of_submodule(M);   // presentation for I / K
-  Pru_M.sort_columns_lexicographically();
-  Pru_M.sort_rows_lexicographically();
-  Pru_M.column_reduction_graded_w_deletion();
-  Pru_M.minimize();
+  measure(profile, &PruningProfile::quotient, [&M, &K = K] { M.append_matrix(K); });                           // presentation for M / K
+  Mat Pru_M = measure(profile, &PruningProfile::presentation, [&I = I, &M] { return I.presentation_of_submodule(M); });   // presentation for I / K
+  measure(profile, &PruningProfile::minimize, [&] {
+    Pru_M.sort_columns_lexicographically();
+    Pru_M.sort_rows_lexicographically();
+    Pru_M.column_reduction_graded_w_deletion();
+    Pru_M.minimize();
+  });
   Pru_M.shift({-epsilon, -epsilon});
   return Pru_M;
 }
-
-
-
-
-
 
 } // namespace stable_decomposition

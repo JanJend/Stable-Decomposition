@@ -96,7 +96,7 @@ TEST_CASE("pruning profiles count actual passes and operations without changing 
     for (double epsilon : {0.0, 0.5}) {
         PruningProfile old_profile, new_profile;
         auto matrix_input = births;
-        Mat old_result = pruning(matrix_input, epsilon, false, &old_profile);
+        Mat old_result = pruning_profiled(matrix_input, epsilon, false, &old_profile);
         Module new_result = pruning(Module(births), epsilon, false, &new_profile);
         auto plain_input = births;
         Mat old_plain = pruning(plain_input, epsilon, false);
@@ -116,6 +116,8 @@ TEST_CASE("pruning profiles count actual passes and operations without changing 
             CHECK(p->minimize.calls == 1);
             CHECK(p->i_iterations == i_passes);
             CHECK(p->k_iterations == k_passes);
+            CHECK(p->i_equal.calls == i_passes);
+            CHECK(p->k_equal.calls == k_passes);
             // This fixture has exactly one additional map when epsilon=0.5.
             CHECK(p->i_preimage.calls == i_passes);
             CHECK(p->k_preimage.calls == k_passes);
@@ -123,5 +125,19 @@ TEST_CASE("pruning profiles count actual passes and operations without changing 
         }
         CHECK(old_profile.i_intersection.calls == 0);
         CHECK(new_profile.i_intersection.calls == i_passes);
+    }
+}
+
+TEST_CASE("instrumented matrix copy agrees with original on a presented module") {
+    using namespace stable_decomposition;
+    for (double epsilon : {0.01, 0.5}) {
+        Mat original_input("test1.scc");
+        Mat profiled_input = original_input;
+        PruningProfile profile;
+        Mat original = pruning(original_input, epsilon, false);
+        Mat measured = pruning_profiled(profiled_input, epsilon, false, &profile);
+        CHECK(measured.data == original.data);
+        CHECK(measured.row_degrees == original.row_degrees);
+        CHECK(measured.col_degrees == original.col_degrees);
     }
 }

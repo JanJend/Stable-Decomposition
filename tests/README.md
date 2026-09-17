@@ -38,7 +38,7 @@ Matching invariants **do not prove module isomorphism**, even on the full grid.
 No presentation files are modified or written.
 
 It also prints the same detailed iteration/operation timing table as the main
-CLI's `--compare` option, with per-map progress output disabled during profiling.
+CLI's `--compare` option, with the usual progress bars enabled.
 Use a Release build for performance comparisons.
 
 Exit codes: **0** for matching checked invariants, **1** for a mismatch, **2** for

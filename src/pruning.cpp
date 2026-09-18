@@ -4,7 +4,7 @@
  * @file pruning.cpp
  * @author Havard Bjerkevik, Jan Jendrysiak, and Fabian Lenzen
  * @brief
- * @version 0.2
+ * @version 0.3.0
  * @date 2025-10-6
  *
  * @copyright

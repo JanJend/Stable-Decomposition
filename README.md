@@ -45,6 +45,7 @@ for the full function mapping, behavioral notes, and tests.
 - `--delta <value>` - Compatibility alias for `--epsilon`.
 - `-o, --output <path>` - Choose the output SCC path; missing directories are created.
 - `--hilbert` - Save Hilbert PNGs for the input and pruned module.
+- `-v, --version` - Display the version without running pruning.
 - `--image-size <pixels>` - Set the heatmap grid size (default 500; range 128–2048, plus margins for labels).
 - `--aida` - Run AIDA directly on both modules and save their decompositions and comparison.
 - `--old` - Use the original matrix pruning instead of the module implementation.
@@ -109,9 +110,21 @@ When built with AIDA, it automatically compares the two pruning results' numbers
 and types of indecomposables, plus their graded Betti signature multiplicities.
 These checks do not write decomposition files. No `--aida` flag is needed;
 that flag separately compares the original input with the final pruned module
-and saves those decompositions. Matching checks do not prove isomorphism; a
-placeholder comment marks where the future isomorphism test belongs. The timing
-and comparison report is saved even with `--no-output`.
+and saves those decompositions. An exact isomorphism test runs when the maximum
+generator-degree multiplicity across both minimized outputs is at most four.
+Above that cutoff, the report explicitly marks isomorphism as skipped; matching
+invariants alone do not prove isomorphism. Different minimal degree multisets
+are rejected immediately regardless of multiplicity. All checks are outside the
+pruning timers, and the report is saved even with `--no-output`.
+
+The separate `compare_pruning` regression executable additionally calls the exact
+isomorphism test on the minimized outputs, outside the pruning timers, and fails
+if they are not isomorphic. Run it with
+`ctest --test-dir build -R '^compare_pruning_' --output-on-failure`.
+Its CTest cases have a 120-second deadline and always test exact isomorphism.
+The ordinary `pruning --compare` uses the multiplicity cutoff because larger
+degree blocks can require an exponential search. The cutoff does not bound the
+cost of computing Hom on large presentations.
 
 The original matrix `pruning_pair` and `pruning` in `src/pruning.cpp` contain no
 profiling code. `src/pruning_profiled.cpp` holds their instrumented copy, used
@@ -120,7 +133,10 @@ only for comparisons; algorithm changes must be kept in sync between the two.
 The C++ image renderer lives in `Persistence-Algebra/include/grlina/draw_hf.hpp`.
 Like `visualisation/visualise_reso.py`, it uses a logarithmic light-blue/blue/black
 scale for positive dimensions and white for zero. Both images use the same grid
-and colour scale. Full projective resolutions are computed explicitly before
+and colour scale, rounded axis ticks and integer dimension labels. Small sampling
+grids are enlarged for readable labels. On macOS, CoreText supplies antialiased
+system fonts; other platforms use the built-in bitmap font. No Python or external
+plotting library is required. Full projective resolutions are computed explicitly before
 evaluating the Hilbert functions, so syzygies are included.
 
 AIDA runs on minimal copies of the input and output. The report compares summand
@@ -137,7 +153,7 @@ epsilon, not its doubled value. Epsilon must be finite and nonnegative.
 
 ## Version
 
-Current version: **0.2**
+Current version: **0.3.0** (pre-release)
 
 ## Authors
 

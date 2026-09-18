@@ -1,5 +1,6 @@
-// A diagnostic comparison, not a module isomorphism test.
+// Compare matrix and module pruning, including an exact isomorphism decision.
 #include "pruning.hpp"
+#include <grlina/isomorphism_test.hpp>
 
 #include <algorithm>
 #include <chrono>
@@ -144,8 +145,14 @@ bool compare_file(const std::filesystem::path& path, double epsilon, bool quick)
               << " (" << mismatches << " mismatches / " << xs.values.size() * ys.values.size()
               << " points; " << (xs.sampled || ys.sampled ? "sampled" : "full common critical") << " grid)\n";
     pass = pass && mismatches == 0;
-    std::cout << (pass ? "PASS: checked invariants agree; this does not prove isomorphism.\n"
-                      : "FAIL: outputs disagree on at least one checked invariant.\n");
+    start = std::chrono::steady_clock::now();
+    const bool isomorphic = graded_linalg::is_isomorphic(
+        old_min.presentation(), new_min.presentation(), true);
+    const double iso_seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+    std::cout << "Isomorphism: " << (isomorphic ? "PASS" : "FAIL") << " (" << iso_seconds << " s)\n";
+    pass = pass && isomorphic;
+    std::cout << (pass ? "PASS: pruning outputs are isomorphic and all invariants agree.\n"
+                      : "FAIL: pruning output comparison failed.\n");
     return pass;
 }
 
@@ -163,7 +170,7 @@ int main(int argc, char** argv) {
                           << "Defaults: epsilon=0.5, quick=false; toy_example_1.scc, toy_example_2.scc,\n"
                           << "and no_columns_test.scc from " << PRUNING_TEST_PRESENTATIONS_DIR << "\n"
                           << "Bare filenames are also looked up in that directory.\n"
-                          << "Exit status: 0=invariants agree, 1=mismatch, 2=invalid arguments or runtime error.\n"
+                          << "Exit status: 0=isomorphic and invariants agree, 1=mismatch, 2=invalid arguments or runtime error.\n"
                           << "--quick is passed to both overloads; the module implementation currently ignores it.\n";
                 return 0;
             } else if (arg == "--epsilon") {

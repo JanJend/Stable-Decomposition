@@ -10,6 +10,7 @@
 ProgramOptions parse_arguments(int argc, char** argv) {
     ProgramOptions opts;
     CLI::App app{"Prune a two-parameter persistence module: SCC input -> SCC output."};
+    app.set_version_flag("-v,--version", "Stable-Decomposition " PRUNING_VERSION);
     app.add_option("input", opts.input_file, "Input SCC presentation or projective resolution")->required();
     app.add_option("-e,--epsilon,--delta", opts.epsilon,
                    "Nonnegative epsilon (default: 1% of degree extent; fallback 0.01)");
@@ -27,8 +28,8 @@ ProgramOptions parse_arguments(int argc, char** argv) {
                "Example: pruning input.scc -e 0.05 --hilbert --aida -o results/pruned.scc");
     try {
         app.parse(argc, argv);
-    } catch (const CLI::CallForHelp&) {
-        std::cout << app.help();
+    } catch (const CLI::Success& message) {
+        app.exit(message);
         opts.help = true;
         return opts;
     } catch (const CLI::ParseError& error) {

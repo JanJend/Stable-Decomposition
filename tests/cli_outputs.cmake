@@ -1,4 +1,9 @@
 set(work "${CMAKE_CURRENT_BINARY_DIR}/pruning-cli-fixtures")
+execute_process(COMMAND "${PRUNING}" --version RESULT_VARIABLE result OUTPUT_VARIABLE version
+    OUTPUT_STRIP_TRAILING_WHITESPACE)
+if(NOT result EQUAL 0 OR NOT version STREQUAL "Stable-Decomposition ${VERSION}")
+    message(FATAL_ERROR "Unexpected pruning version: ${version}")
+endif()
 file(MAKE_DIRECTORY "${work}")
 set(input "${work}/input with spaces.scc")
 # Two free summands with distinct grades; the zero-epsilon decomposition is unchanged.
@@ -79,7 +84,7 @@ endif()
 file(READ "${work}/comparison_pruning_comparison.txt" comparison)
 foreach(expected "I iterations" "K iterations" "I preimage" "I intersection" "K preimage"
                  "Old avg ms" "New avg ms" "Generator degrees: match" "Relation degrees: match"
-                 "Checks passed. Isomorphism untested.")
+                 "Isomorphism: match." "Checks passed.")
     string(FIND "${comparison}" "${expected}" position)
     if(position EQUAL -1)
         message(FATAL_ERROR "Comparison missing '${expected}': ${comparison}")
@@ -116,3 +121,25 @@ endforeach()
 if(EXISTS "${work}/comparison.scc")
     message(FATAL_ERROR "--no-output wrote an SCC during comparison")
 endif()
+
+# Exercise the empty case and the multiplicity cutoff on minimized outputs.
+foreach(k 0 2 4 5)
+    string(REPEAT "0 0 ;\n" ${k} generators)
+    file(WRITE "${work}/multiplicity-${k}.scc" "scc2020\n2\n0 ${k} 0\n${generators}")
+    execute_process(COMMAND "${PRUNING}" "${work}/multiplicity-${k}.scc"
+        -e 0 --compare --no-output -o "${work}/multiplicity-${k}-result.scc"
+        RESULT_VARIABLE result OUTPUT_VARIABLE stdout ERROR_VARIABLE stderr TIMEOUT 30)
+    if(NOT result EQUAL 0)
+        message(FATAL_ERROR "Multiplicity ${k} comparison failed: ${stdout}\n${stderr}")
+    endif()
+    file(READ "${work}/multiplicity-${k}-result_pruning_comparison.txt" comparison)
+    if(k LESS_EQUAL 4)
+        set(expected "Isomorphism: match.")
+    else()
+        set(expected "Isomorphism: skipped (generator multiplicity 5 > 4).")
+    endif()
+    string(FIND "${comparison}" "${expected}" position)
+    if(position EQUAL -1)
+        message(FATAL_ERROR "Wrong multiplicity ${k} decision: ${comparison}")
+    endif()
+endforeach()

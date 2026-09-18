@@ -2,6 +2,7 @@
 #include "pruning.hpp"
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <grlina/draw_hf.hpp>
+#include <grlina/isomorphism_test.hpp>
 #ifdef PRUNING_WITH_AIDA
 #include <aida_interface.hpp>
 #endif
@@ -61,8 +62,8 @@ void write_hilbert_images(Module& input, Module& output, const fs::path& prefix,
     if (positive_max == 0) positive_min=1;
     const auto before_path=prefix.string()+"_input_hilbert.png";
     const auto after_path=prefix.string()+"_output_hilbert.png";
-    graded_linalg::save_hilbert_png(before,before_path,positive_min,positive_max,"INPUT HILBERT FUNCTION");
-    graded_linalg::save_hilbert_png(after,after_path,positive_min,positive_max,"OUTPUT HILBERT FUNCTION");
+    graded_linalg::save_hilbert_png(before,before_path,positive_min,positive_max,"Input Hilbert function");
+    graded_linalg::save_hilbert_png(after,after_path,positive_min,positive_max,"Output Hilbert function");
     std::cout << "Saved Hilbert images: " << before_path << "\n                      " << after_path << '\n';
 }
 
@@ -182,6 +183,7 @@ Module compare_pruning(const Module& input, double epsilon, const fs::path& pref
     };
     bool match = compare_degrees("Generator", old_p.row_degrees, new_p.row_degrees);
     match = compare_degrees("Relation", old_p.col_degrees, new_p.col_degrees) && match;
+    const bool degrees_match = match;
 #ifdef PRUNING_WITH_AIDA
     std::cout << "Running AIDA on both pruning results...\n" << std::flush;
     const auto old_decomposition = decompose(old_checked);
@@ -217,8 +219,24 @@ Module compare_pruning(const Module& input, double epsilon, const fs::path& pref
 #else
     report << "AIDA: unavailable.\n";
 #endif
-    // TODO: Add a module isomorphism test between old_checked and new_checked when available.
-    report << (match ? "Checks passed. " : "Checks FAILED. ") << "Isomorphism untested.\n";
+    auto multiplicity = [](const auto& degrees) {
+        std::map<graded_linalg::r2degree, std::size_t> counts;
+        std::size_t largest = 0;
+        for (const auto& d : degrees) largest = std::max(largest, ++counts[d]);
+        return largest;
+    };
+    const auto k = std::max(multiplicity(old_p.row_degrees), multiplicity(new_p.row_degrees));
+    // Benchmarked up to k=4; larger blocks can require exponential enumeration.
+    constexpr std::size_t exact_multiplicity_limit = 4;
+    if (!degrees_match || k <= exact_multiplicity_limit) {
+        const bool isomorphic = graded_linalg::is_isomorphic(old_p, new_p, true);
+        report << "Isomorphism: " << (isomorphic ? "match" : "DIFFER") << ".\n";
+        match = match && isomorphic;
+    } else {
+        report << "Isomorphism: skipped (generator multiplicity " << k << " > "
+               << exact_multiplicity_limit << ").\n";
+    }
+    report << (match ? "Checks passed.\n" : "Checks FAILED.\n");
     const fs::path path = prefix.string() + "_pruning_comparison.txt";
     auto file = output_file(path);
     file << report.str();

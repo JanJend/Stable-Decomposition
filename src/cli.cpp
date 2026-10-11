@@ -1,8 +1,8 @@
 #include "cli.hpp"
 #include "pruning.hpp"
 #define STB_IMAGE_WRITE_IMPLEMENTATION
-#include <grlina/draw_hf.hpp>
-#include <grlina/isomorphism_test.hpp>
+#include <grlina/mod_hilbert_plot.hpp>
+#include <grlina/mod_isomorphism.hpp>
 #ifdef PRUNING_WITH_AIDA
 #include <aida_interface.hpp>
 #endif
@@ -36,10 +36,10 @@ void write_hilbert_images(Module& input, Module& output, const fs::path& prefix,
     const auto output_degrees = output.support_degrees();
     degrees.insert(degrees.end(), output_degrees.begin(), output_degrees.end());
     if (degrees.empty()) degrees.push_back({0,0});
-    double xmin=degrees[0].first, xmax=xmin, ymin=degrees[0].second, ymax=ymin;
+    double xmin=degrees[0][0], xmax=xmin, ymin=degrees[0][1], ymax=ymin;
     for (const auto& d : degrees) {
-        xmin=std::min(xmin,d.first); xmax=std::max(xmax,d.first);
-        ymin=std::min(ymin,d.second); ymax=std::max(ymax,d.second);
+        xmin=std::min(xmin,d[0]); xmax=std::max(xmax,d[0]);
+        ymin=std::min(ymin,d[1]); ymax=std::max(ymax,d[1]);
     }
     const double dx = xmax > xmin ? (xmax-xmin)*0.05 : 0.1;
     const double dy = ymax > ymin ? (ymax-ymin)*0.05 : 0.1;
@@ -76,11 +76,10 @@ struct Decomposition {
 
 Decomposition decompose(const Module& module, const fs::path& path = {}) {
     Decomposition result;
-    Module working(module.presentation());
+    aida::Module working{aida::GradedMatrix(module.presentation())};
     working.minimize(); // AIDA requires a minimal presentation.
     if (working.number_of_generators() != 0) {
         working.sort_compatibly();
-        working.mutable_presentation().compute_col_batches(); // Sets k_max before AIDA loads its tables.
         aida::AIDA_functor decomposer;
         decomposer.config.sort = true;
         decomposer(working,result.blocks);
@@ -94,19 +93,18 @@ Decomposition decompose(const Module& module, const fs::path& path = {}) {
         ++result.types[block.get_type()];
         if (!path.empty()) {
             file << '\n' << block.get_type() << '\n';
-            block.to_stream_r2(file);
+            block.to_stream(file);
         }
-        Module summand(static_cast<const Mat&>(block));
+        aida::Module summand(static_cast<const aida::GradedMatrix&>(block));
         summand.minimize();
         // Compare graded Betti signatures, not coefficient matrices or presumed
         // isomorphism classes. Minimal presentations can have different bases.
         std::ostringstream key;
         key << std::setprecision(17);
-        for (const auto* grades : {&summand.presentation().row_degrees,&summand.presentation().col_degrees}) {
-            auto sorted=*grades;
-            std::sort(sorted.begin(),sorted.end(),graded_linalg::Degree_traits<graded_linalg::r2degree>::lex_lambda());
+        for (auto sorted : {summand.presentation().real_row_degrees(), summand.presentation().real_col_degrees()}) {
+            std::sort(sorted.begin(),sorted.end(),graded_linalg::Degree_traits<aida::RealDegree>::lex_lambda());
             key << '[';
-            for (const auto& d : sorted) key << '(' << d.first << ',' << d.second << ')';
+            for (const auto& d : sorted) key << '(' << d[0] << ',' << d[1] << ')';
             key << ']';
         }
         ++result.signatures[key.str()];
@@ -177,7 +175,7 @@ Module compare_pruning(const Module& input, double epsilon, const fs::path& pref
         });
         report << label << " degrees: " << (same ? "match" : "DIFFER") << '\n';
         for (const auto& entry : counts) if (entry.second.first != entry.second.second)
-            report << std::setprecision(17) << "  (" << entry.first.first << ", " << entry.first.second
+            report << std::setprecision(17) << "  (" << entry.first[0] << ", " << entry.first[1]
                    << "): matrix=" << entry.second.first << ", module=" << entry.second.second << '\n';
         return same;
     };

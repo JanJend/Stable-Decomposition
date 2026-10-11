@@ -12,7 +12,7 @@
  */
 
 #include "pruning.hpp"
-#include <grlina/presentation_operations.hpp>
+#include <grlina/mod_presentations.hpp>
 #include <grlina/hom_interface.hpp>
 #include <numeric>
 #include <algorithm>
@@ -32,90 +32,13 @@ graded_linalg::r2degree pruning_shift(double epsilon) {
     return {2 * epsilon, 2 * epsilon};
 }
 
-/* New algorithm using the module framework*/
-std::pair<Submodule, Submodule> pruning_pair(const Module& X, double epsilon, const bool quick, PruningProfile* profile) {
-
-  const auto eps_vec = pruning_shift(epsilon);
-  Hom eta_X = Homomorphism<Mat>::canonical_shift(X, eps_vec);
-
-  auto B = measure(profile, &PruningProfile::basis, [&] {
-    return timed_with_progress("End_2eps/0", [&] { return End_2d_0(eta_X, true); });
-  });
-
- 
-  Submodule I = X.whole_submodule();
-  // The following line is not consistent with the paper: 
-  // I think that "K" should be Ker_2eps.
-  if (B.empty()) return {I, X.zero_submodule()};
-
-  // Compute I
-  int iteration_I = 0;
-  int counter = 0;
-  {
-  PruningTimer phase(profile ? &profile->i_phase : nullptr);
-  for (;;) {
-    counter = 0;
-    iteration_I++;
-    if (profile) ++profile->i_iterations;
-    const Submodule I_ = I;
-    auto J = measure(profile, &PruningProfile::i_image, [&] { return eta_X.image(I); });
-    for(const Hom& f : B){
-      print_progress(iteration_I, ++counter, B.size());
-      auto preimage = measure(profile, &PruningProfile::i_preimage, [&] { return f.preimage(J); });
-      I = measure(profile, &PruningProfile::i_intersection, [&] { return I.intersection(preimage, false); });
-      measure(profile, &PruningProfile::i_reduce, [&] { I.minimize_generators(); });
-    }
-    print_progress(iteration_I, counter, B.size());
-    std::cout << std::endl;
-    // I decreases, so only the reverse containment needs checking.
-    if (measure(profile, &PruningProfile::i_equal, [&] { return I.contains(I_); })) break;
-  }
-  }
-
-  // Compute K
-  Submodule K = X.zero_submodule();
-  int iteration_K = 0;
-  
-  {
-  PruningTimer phase(profile ? &profile->k_phase : nullptr);
-  for (;;) {
-    counter = 0;
-    iteration_K++;
-    if (profile) ++profile->k_iterations;
-    const Submodule K_ = K;
-    auto L = measure(profile, &PruningProfile::k_image, [&] { return eta_X.image(K); });
-    for(const Hom& f : B){
-      print_progress(iteration_K, ++counter, B.size());
-      auto image = measure(profile, &PruningProfile::k_image, [&] { return f.image(K); });
-      L = measure(profile, &PruningProfile::k_sum, [&] { return L.sum(image); });
-    }
-    // There is currently a difference here to the algorithm in the paper: 
-    // eta_X i sused instead of eta_I, which means that K is not a submodule of I
-    // I am mostly sure that this doesnt change anything.
-    K = measure(profile, &PruningProfile::k_preimage, [&] { return eta_X.preimage(L); });
-    print_progress(iteration_K, counter, B.size());
-    std::cout << std::endl;
-    // K increases: eta_X(K_) is included in L before taking its preimage.
-    if (measure(profile, &PruningProfile::k_equal, [&] { return K_.contains(K); })) break;
-  }
-  }
-
-  std::cout << iteration_I << " iterations for I, " << iteration_K << " iterations for K" << std::endl;
-  std::cout << "Output is " << std::max(iteration_I, iteration_K)*epsilon << "-interleaved with the input" << std::endl;
-  return {I,K};
+// Preserve the existing compiled R2 entry points.
+std::pair<Submodule, Submodule> pruning_pair(const Module& X, double epsilon, bool quick, PruningProfile* profile) {
+  return stable_decomposition::pruning_pair<Mat>(X, epsilon, quick, profile);
 }
 
-Module pruning(Module X, const double epsilon, bool quick, PruningProfile* profile) {
-  if (profile) *profile = {};
-  PruningTimer total(profile ? &profile->total : nullptr);
-  auto parent = std::make_shared<Module>(std::move(X));
-  auto [I, K] = pruning_pair(*parent, epsilon, quick, profile);
-  auto I_qK = measure(profile, &PruningProfile::quotient, [&I = I, &K = K] { return I.submodule_quotient(K); });
-  measure(profile, &PruningProfile::presentation, [&] { I_qK.compute_presentation(); });
-  Module result = std::move(I_qK);
-  measure(profile, &PruningProfile::minimize, [&] { result.minimize(); });
-  result.shift({-epsilon, -epsilon});
-  return result;
+Module pruning(Module X, double epsilon, bool quick, PruningProfile* profile) {
+  return stable_decomposition::pruning<Mat>(std::move(X), epsilon, quick, profile);
 }
 
 std::pair<Mat, Mat> pruning_pair(Mat &M, const double epsilon, const bool quick) {
@@ -311,8 +234,7 @@ Mat pruning(Mat &M, const double epsilon, bool quick) {
   //return K_module;
   M.append_matrix(K);                           // presentation for M / K
   Mat Pru_M = I.presentation_of_submodule(M);   // presentation for I / K
-  Pru_M.sort_columns_lexicographically();
-  Pru_M.sort_rows_lexicographically();
+  Pru_M.sort_compatibly();
   Pru_M.column_reduction_graded_w_deletion();
   Pru_M.minimize();
   Pru_M.shift({-epsilon, -epsilon});

@@ -1,7 +1,7 @@
 // Instrumented copy of matrix pruning. Keep the algorithm in sync with pruning.cpp.
 #include "pruning.hpp"
 #include <grlina/hom_interface.hpp>
-#include <grlina/presentation_operations.hpp>
+#include <grlina/mod_presentations.hpp>
 #include <algorithm>
 #include <numeric>
 #include <random>
@@ -216,8 +216,7 @@ Mat pruning_profiled(Mat &M, const double epsilon, bool quick, PruningProfile* p
   measure(profile, &PruningProfile::quotient, [&M, &K = K] { M.append_matrix(K); });                           // presentation for M / K
   Mat Pru_M = measure(profile, &PruningProfile::presentation, [&I = I, &M] { return I.presentation_of_submodule(M); });   // presentation for I / K
   measure(profile, &PruningProfile::minimize, [&] {
-    Pru_M.sort_columns_lexicographically();
-    Pru_M.sort_rows_lexicographically();
+    Pru_M.sort_compatibly();
     Pru_M.column_reduction_graded_w_deletion();
     Pru_M.minimize();
   });

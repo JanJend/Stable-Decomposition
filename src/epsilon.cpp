@@ -22,25 +22,25 @@ std::optional<double> calculate_epsilon_from_matrix(const Mat& M) {
     double min_x, max_x, min_y, max_y;
 
     if (!col_degrees.empty()) {
-        min_x = max_x = col_degrees[0].first;
-        min_y = max_y = col_degrees[0].second;
+        min_x = max_x = col_degrees[0][0];
+        min_y = max_y = col_degrees[0][1];
     } else {
-        min_x = max_x = row_degrees[0].first;
-        min_y = max_y = row_degrees[0].second;
+        min_x = max_x = row_degrees[0][0];
+        min_y = max_y = row_degrees[0][1];
     }
 
     // Find bounding box of all degrees
     for (const auto& d : col_degrees) {
-        min_x = std::min(min_x, d.first);
-        max_x = std::max(max_x, d.first);
-        min_y = std::min(min_y, d.second);
-        max_y = std::max(max_y, d.second);
+        min_x = std::min(min_x, d[0]);
+        max_x = std::max(max_x, d[0]);
+        min_y = std::min(min_y, d[1]);
+        max_y = std::max(max_y, d[1]);
     }
     for (const auto& d : row_degrees) {
-        min_x = std::min(min_x, d.first);
-        max_x = std::max(max_x, d.first);
-        min_y = std::min(min_y, d.second);
-        max_y = std::max(max_y, d.second);
+        min_x = std::min(min_x, d[0]);
+        max_x = std::max(max_x, d[0]);
+        min_y = std::min(min_y, d[1]);
+        max_y = std::max(max_y, d[1]);
     }
 
     // Compute max extent

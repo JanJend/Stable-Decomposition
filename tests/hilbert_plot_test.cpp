@@ -1,4 +1,4 @@
-#include <grlina/draw_hf.hpp>
+#include <grlina/mod_hilbert_plot.hpp>
 #include <iostream>
 
 namespace {

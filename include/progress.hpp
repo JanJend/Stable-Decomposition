@@ -1,5 +1,5 @@
 #pragma once
-#include <grlina/progress.hpp>
+#include <grlina/general.hpp>
 #include <chrono>
 
 namespace stable_decomposition {

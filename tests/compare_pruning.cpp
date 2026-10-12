@@ -1,6 +1,6 @@
 // Compare matrix and module pruning, including an exact isomorphism decision.
 #include "pruning.hpp"
-#include <grlina/isomorphism_test.hpp>
+#include <grlina/mod_isomorphism.hpp>
 
 #include <algorithm>
 #include <chrono>
@@ -15,13 +15,13 @@
 #include <vector>
 
 namespace sd = stable_decomposition;
-using DegreeCounts = std::map<std::pair<double, double>, std::size_t>;
+using DegreeCounts = std::map<graded_linalg::r2degree, std::size_t>;
 
 namespace {
 
 DegreeCounts degree_counts(const graded_linalg::vec<graded_linalg::r2degree>& degrees) {
     DegreeCounts counts;
-    for (const auto& d : degrees) ++counts[{d.first, d.second}];
+    for (const auto& d : degrees) ++counts[d];
     return counts;
 }
 
@@ -38,7 +38,7 @@ bool compare_degrees(const char* label, const DegreeCounts& old_counts,
         const auto old_n = old_it == old_counts.end() ? 0 : old_it->second;
         const auto new_n = new_it == new_counts.end() ? 0 : new_it->second;
         if (old_n != new_n && shown++ < 8)
-            std::cout << "  degree (" << entry.first.first << ", " << entry.first.second
+            std::cout << "  degree (" << entry.first[0] << ", " << entry.first[1]
                       << "): old multiplicity=" << old_n << ", new=" << new_n << '\n';
     }
     if (shown > 8) std::cout << "  ... " << shown - 8 << " more differing degrees\n";
@@ -55,7 +55,7 @@ Axis make_axis(const sd::Mat& old_p, const sd::Mat& new_p, bool x_axis) {
     for (const auto* p : {&old_p, &new_p}) {
         for (const auto* degrees : {&p->row_degrees, &p->col_degrees}) {
             for (const auto& d : *degrees) {
-                const double value = x_axis ? d.first : d.second;
+                const double value = x_axis ? d[0] : d[1];
                 if (!std::isfinite(value))
                     throw std::invalid_argument("Comparison grid requires finite presentation degrees");
                 values.push_back(value);
@@ -86,7 +86,7 @@ bool compare_file(const std::filesystem::path& path, double epsilon, bool quick)
     sd::Module loaded(path.string());
     sd::Mat input = loaded.presentation();
     input.sort_compatibly();
-    input.validate();
+    if (!input.is_graded_matrix()) throw std::runtime_error("Ungraded pruning result");
     std::cout << "Input: " << input.get_num_rows() << " generators, "
               << input.get_num_cols() << " relations\n";
 
@@ -104,8 +104,8 @@ bool compare_file(const std::filesystem::path& path, double epsilon, bool quick)
     const double new_seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
     std::cout << "\nRuntime: old=" << old_seconds << " s, new=" << new_seconds << " s\n";
     sd::print_pruning_comparison(std::cout, old_profile, new_profile);
-    old_result.presentation().validate();
-    new_result.presentation().validate();
+    if (!old_result.presentation().is_graded_matrix()) throw std::runtime_error("Ungraded pruning result");
+    if (!new_result.presentation().is_graded_matrix()) throw std::runtime_error("Ungraded pruning result");
     std::cout << "Presentation validation: PASS\n";
 
     const auto& old_p = old_result.presentation();

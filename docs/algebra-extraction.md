@@ -24,7 +24,7 @@ was removed or updated.
 
 | Historical helper | Library implementation / preferred object API |
 | --- | --- |
-| `matrix_reduction` | `reduce_matrix_family_modulo` in `matrix_family.hpp` |
+| `matrix_reduction` | `reduce_matrix_family_modulo` in `mat_base.hpp` |
 | `homSpace` | `homomorphism_lift_basis`; `module_hom_space_basis` for Hom classes |
 | `End_2d_0` | `End_2d_0` |
 | `zero_submodule`, `all_submodule` | matrix adapters; `Submodule::zero`, `Submodule::whole` |
@@ -36,10 +36,10 @@ was removed or updated.
 | `present_same_submodule` | `Submodule::equals`, including parent relations |
 | containment in a presented parent | `Submodule::contains`, `is_contained_in` |
 | `image(f,A,B,U)` (previously only declared) | `Homomorphism::image(submodule)` |
-| `timed_with_progress` | shared exception-safe implementation in `grlina/progress.hpp` |
+| `timed_with_progress` | shared exception-safe implementation in `grlina/general.hpp` |
 
-Presentation-level adapters live in `grlina/presentation_operations.hpp`, also
-available through `grlina/modules.hpp`. Object operations live in `submodule.hpp`
+Presentation-level adapters live in `grlina/mod_presentations.hpp`, also
+available through `grlina/mod_modules.hpp`. Object operations live in `mod_submodule.hpp`
 and `homomorphism.hpp`. All matrix templates require the graded CRTP contract.
 Old Stable-Decomposition function signatures remain available through
 `pruning.hpp` and link via `stable_pruning`; their mathematical implementations
@@ -119,3 +119,47 @@ from 2*epsilon and test the final translation in both quick and normal modes.
 The executable-level CMake test verifies extraction, overrides, compatibility
 flags, zero epsilon and clean rejection of invalid inputs. Existing pruning
 integration tests remain.
+
+## Coordinate grids
+
+`include/module_pruning.hpp` contains the existing high-level module iteration
+as a matrix template. `pruning.hpp` exposes it alongside the compiled R2 wrappers:
+
+```cpp
+#include "pruning.hpp"
+#include <grlina/mat_grid.hpp>
+
+using Matrix = graded_linalg::GridGradedSparseMatrix<double, 2, int>;
+using Module = graded_linalg::Module<Matrix>;
+Matrix matrix(existing_r2_presentation);
+Module result = stable_decomposition::pruning(Module(std::move(matrix)), 0.25);
+```
+
+The algorithm uses real epsilon amounts through the module and homomorphism
+interfaces. It never reads or writes degree storage. The grid stores real
+coordinate values, while row and column degrees contain integral grid indices.
+The dimension is a template parameter; the third parameter selects the index type.
+These grid matrices use vector columns. CSC callers use
+`R2GradedSparseMatrix<Index, CSCStorage<Index>>` with physical double degrees.
+CSC inputs are converted once to vector columns before pruning, including all
+stored resolutions. Final modules and pruning-pair embeddings are packed back
+into CSC. Pair outputs retain the original parent object, and conversions
+preserve physical degrees, resolution maps, and resolution completeness. Profiling
+continues to measure the editable algorithm; storage conversion is outside its
+phase timings.
+
+Two-parameter kernels reuse the existing grid scheduler. For dimension `d >= 3`,
+the kernel routine freezes the first `d - 2` coordinates at relevant grid values,
+runs the native two-parameter kernel on each slice, then lifts and filters its
+generators. The number of slices can grow exponentially. These generators need
+not form a free module, so completing a resolution may require repeated kernels.
+
+`tests/dynamic_grid_pruning_test.cpp` compares the shared algorithm against R2
+using nonuniform grids and fractional shifts, including one- and three-parameter
+instantiations. It also
+checks independent grids, canonical maps, epsilon functors, resolutions and
+Hilbert queries. `tests/csc_pruning_boundary_test.cpp` runs with CSC runtime
+performance diagnostics enabled and checks that pruning produces no mutation
+warnings, preserves input storage, and returns pair embeddings with their
+original parent lifetime. The command-line entry points retain their existing
+R2 types.

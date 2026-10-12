@@ -24,7 +24,7 @@ TEST_CASE("epsilon uses all presentation degrees and explicit override") {
 
 TEST_CASE("epsilon controls the doubled iteration shift and final half shift") {
     using namespace stable_decomposition;
-    CHECK(pruning_shift(0.25) == graded_linalg::r2degree(0.5, 0.5));
+    CHECK((pruning_shift(0.25) == graded_linalg::r2degree{0.5, 0.5}));
     // Free generators born at 0 and 1. The map early->late becomes available
     // exactly when 2*epsilon reaches 1, not when epsilon reaches 1.
     Mat births(0, 2, {}, {}, {{0,0}, {1,1}});

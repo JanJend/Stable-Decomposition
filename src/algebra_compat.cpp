@@ -1,6 +1,6 @@
 #include "algebra_compat.hpp"
 #include "progress.hpp"
-#include <grlina/presentation_operations.hpp>
+#include <grlina/mod_presentations.hpp>
 #include <grlina/hom_interface.hpp>
 
 namespace stable_decomposition {

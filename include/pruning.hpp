@@ -31,3 +31,6 @@ Mat pruning_profiled(Mat& M, double epsilon, bool quick, PruningProfile* profile
 
 
 } // namespace stable_decomposition
+
+// Templated module overloads for coordinate and grid matrices.
+#include "module_pruning.hpp"

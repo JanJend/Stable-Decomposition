@@ -18,7 +18,7 @@ int main() {
     assert(source.projective_resolution().size() > 1);
     source.set_injective_resolution(ChainComplex<Editable>(vec<Editable>{matrix}));
     const auto expected = sd::pruning(source, 0.5);
-    auto compact = sd::module_pruning_detail::convert_module_storage<CSCStorage<int>>(source);
+    auto compact = sd::convert_module_storage<CSCStorage<int>>(source);
     assert(compact.has_complete_projective_resolution());
     assert(compact.projective_resolution().size() == source.projective_resolution().size());
     assert(compact.has_injective_resolution());

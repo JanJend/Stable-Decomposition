@@ -38,7 +38,7 @@ int main() {
         require(width == 625 && height == 545); // small grids leave room for labels
         require(colour(150,385) == white); // zero at bottom left; Y increases upwards
         require(colour(150,135) == low);
-        require(colour(400,385) == graded_linalg::detail::hilbert_colour(0.5));
+        require(colour(400,385) == graded_linalg::hilbert_colour(0.5));
         require(colour(400,135) == high);
 
         grid.values = {{1,1},{1,1}};

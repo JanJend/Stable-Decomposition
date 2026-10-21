@@ -20,7 +20,6 @@
 #include <type_traits>
 
 namespace stable_decomposition {
-namespace module_pruning_detail {
 
 // Grid matrices distinguish geometric shifts from stored index degrees.
 template <typename Matrix>
@@ -80,8 +79,6 @@ auto convert_module_storage(const graded_linalg::Module<Matrix>& module) {
     return result;
 }
 
-} // namespace module_pruning_detail
-
 /** Coordinate and grid matrices share this high-level module algorithm. */
 template <typename Matrix>
 std::pair<graded_linalg::Submodule<Matrix>, graded_linalg::Submodule<Matrix>>
@@ -90,10 +87,10 @@ pruning_pair(const graded_linalg::Module<Matrix>& X,
              bool quick = false,
              PruningProfile* profile = nullptr) {
 
-    if constexpr (module_pruning_detail::editable_conversion_required<Matrix>) {
+    if constexpr (editable_conversion_required<Matrix>) {
         auto original = X.shared_from_this();
         using EditableStorage = graded_linalg::vec<graded_linalg::vec<typename Matrix::index_type>>;
-        auto editable = module_pruning_detail::convert_module_storage<EditableStorage>(X);
+        auto editable = convert_module_storage<EditableStorage>(X);
         auto parent = std::make_shared<const decltype(editable)>(std::move(editable));
         auto [I, K] =
             stable_decomposition::pruning_pair(*parent, epsilon, quick, profile);
@@ -101,11 +98,11 @@ pruning_pair(const graded_linalg::Module<Matrix>& X,
         // embeddings; their optional presentation cache is computed on demand.
         return {graded_linalg::Submodule<Matrix>(
                     original,
-                    module_pruning_detail::convert_matrix_storage<typename Matrix::storage_type>(
+                    convert_matrix_storage<typename Matrix::storage_type>(
                         I.generator_map().generator_lift())),
                 graded_linalg::Submodule<Matrix>(
                     original,
-                    module_pruning_detail::convert_matrix_storage<typename Matrix::storage_type>(
+                    convert_matrix_storage<typename Matrix::storage_type>(
                         K.generator_map().generator_lift()))};
     } else {
 
@@ -114,7 +111,7 @@ pruning_pair(const graded_linalg::Module<Matrix>& X,
         using Submodule = graded_linalg::Submodule<Matrix>;
         using Hom = graded_linalg::Homomorphism<Matrix>;
         const auto eps_vec =
-            module_pruning_detail::diagonal_translation(X.presentation(), 2 * epsilon);
+            diagonal_translation(X.presentation(), 2 * epsilon);
         Hom eta_X = graded_linalg::Homomorphism<Matrix>::canonical_shift(X, eps_vec);
 
         auto B = measure(profile, &PruningProfile::basis, [&] {
@@ -217,12 +214,12 @@ graded_linalg::Module<Matrix> pruning(graded_linalg::Module<Matrix> X,
                                       double epsilon,
                                       bool quick = false,
                                       PruningProfile* profile = nullptr) {
-    if constexpr (module_pruning_detail::editable_conversion_required<Matrix>) {
+    if constexpr (editable_conversion_required<Matrix>) {
         using EditableStorage = graded_linalg::vec<graded_linalg::vec<typename Matrix::index_type>>;
-        auto editable = module_pruning_detail::convert_module_storage<EditableStorage>(X);
+        auto editable = convert_module_storage<EditableStorage>(X);
         auto result = stable_decomposition::pruning(
             std::move(editable), epsilon, quick, profile);
-        return module_pruning_detail::convert_module_storage<typename Matrix::storage_type>(result);
+        return convert_module_storage<typename Matrix::storage_type>(result);
     } else {
         using Module = graded_linalg::Module<Matrix>;
         if (profile)
@@ -241,7 +238,7 @@ graded_linalg::Module<Matrix> pruning(graded_linalg::Module<Matrix> X,
             result.minimize();
         });
         // Translate physical coordinates; grid indices alone do not encode epsilon.
-        result.shift(module_pruning_detail::diagonal_translation(result.presentation(), -epsilon));
+        result.shift(diagonal_translation(result.presentation(), -epsilon));
         return result;
     }
 }

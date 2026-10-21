@@ -131,7 +131,7 @@ TEST_CASE("pruning profiles count actual passes and operations without changing 
 TEST_CASE("instrumented matrix copy agrees with original on a presented module") {
     using namespace stable_decomposition;
     for (double epsilon : {0.01, 0.5}) {
-        Mat original_input("test1.scc");
+        Mat original_input(PRUNING_TEST_FIXTURE_DIR "/test1.scc");
         Mat profiled_input = original_input;
         PruningProfile profile;
         Mat original = pruning(original_input, epsilon, false);

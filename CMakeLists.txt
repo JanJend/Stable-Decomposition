@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.28)
 project(stable-decomposition VERSION 0.3.0 LANGUAGES CXX)
 # C++ standard (overridable on the command line for testing newer standards).
-# Kept at 17 to match AIDA, Persistence-Algebra and Skyscraper-Invariant.
+# Kept at 17 to match AIDA and Persistence-Algebra.
 if(NOT DEFINED CMAKE_CXX_STANDARD)
     set(CMAKE_CXX_STANDARD 17)
 endif()
@@ -39,8 +39,6 @@ find_package(Boost REQUIRED COMPONENTS timer graph)
 # Reuse AIDA's parser dependency and call its library directly when available.
 set(AIDA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../AIDA" CACHE PATH "AIDA checkout")
 find_path(CLI11_INCLUDE_DIR CLI11.hpp HINTS "${AIDA_DIR}/include" REQUIRED)
-find_path(STB_INCLUDE_DIR stb_image_write.h
-    HINTS "${CMAKE_CURRENT_SOURCE_DIR}/../Skyscraper-Invariant/include" REQUIRED)
 option(PRUNING_WITH_AIDA "Enable direct AIDA decomposition comparison" ON)
 if(PRUNING_WITH_AIDA)
     add_subdirectory("${AIDA_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/aida" EXCLUDE_FROM_ALL)
@@ -82,7 +80,6 @@ target_include_directories(stable_pruning SYSTEM PRIVATE "${CLI11_INCLUDE_DIR}")
 target_compile_definitions(stable_pruning PRIVATE PRUNING_VERSION="${PROJECT_VERSION}")
 add_library(pruning_cli STATIC src/cli.cpp)
 target_link_libraries(pruning_cli PUBLIC stable_pruning)
-target_include_directories(pruning_cli SYSTEM PRIVATE "${STB_INCLUDE_DIR}")
 if(APPLE)
     target_compile_definitions(pruning_cli PRIVATE GRLINA_HILBERT_CORETEXT)
     target_link_libraries(pruning_cli PRIVATE "-framework CoreText" "-framework CoreGraphics" "-framework CoreFoundation")
@@ -104,7 +101,6 @@ if(BUILD_TESTING)
     target_compile_options(csc_pruning_boundary_test PRIVATE -UNDEBUG)
     add_test(NAME csc_pruning_boundary COMMAND csc_pruning_boundary_test)
     add_executable(hilbert_plot_test tests/hilbert_plot_test.cpp)
-    target_include_directories(hilbert_plot_test SYSTEM PRIVATE "${STB_INCLUDE_DIR}")
     add_test(NAME hilbert_plot COMMAND hilbert_plot_test)
     add_test(NAME pruning_cli_outputs COMMAND ${CMAKE_COMMAND}
         -DPRUNING=$<TARGET_FILE:pruning> -DWITH_AIDA=${PRUNING_WITH_AIDA} -DVERSION=${PROJECT_VERSION}
@@ -131,7 +127,9 @@ if(BUILD_TESTING AND doctest_FOUND)
     include(doctest)
     add_executable(tests tests/tests.cpp tests/algebra_adapters_test.cpp tests/epsilon_test.cpp tests/dynamic_grid_pruning_test.cpp)
     target_link_libraries(tests PRIVATE doctest::doctest stable_pruning)
-    doctest_discover_tests(tests WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/tests)
+    target_compile_definitions(tests PRIVATE
+        PRUNING_TEST_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests")
+    doctest_discover_tests(tests)
     add_test(NAME pruning_requires_input COMMAND $<TARGET_FILE:pruning>)
     set_tests_properties(pruning_requires_input PROPERTIES WILL_FAIL TRUE)
     add_test(NAME pruning_epsilon_cli COMMAND ${CMAKE_COMMAND}

@@ -27,7 +27,7 @@ TEST_CASE("zero-scale pruning preserves a square interval") {
 
 TEST_CASE("test1.scc") {
     using namespace stable_decomposition;
-    std::string input = "test1.scc";
+    std::string input = PRUNING_TEST_FIXTURE_DIR "/test1.scc";
     float epsilon = .01;
 
     // Compare both algorithms on the same fixture.

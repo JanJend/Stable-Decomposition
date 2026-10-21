@@ -18,11 +18,11 @@ cmake --build build --target pruning -j 2
 Use `-DCMAKE_BUILD_TYPE=Debug` for debug symbols; the executable is then named
 `pruning_debug`. Build the `tests` and `compare_pruning` targets to run the tests.
 
-The default workspace layout has sibling `Persistence-Algebra`, `AIDA`, and
-`Skyscraper-Invariant` checkouts. The build reuses AIDA's bundled CLI11 parser
-and Skyscraper-Invariant's `stb_image_write.h`; no Python or GUI library is needed.
+The default workspace layout has sibling `Persistence-Algebra` and `AIDA`
+checkouts. The build reuses AIDA's bundled CLI11 parser. Persistence-Algebra
+bundles the PNG writer used for Hilbert images; no Python or GUI library is needed.
 Their locations can be overridden with `PERSISTENCE_ALGEBRA_DIR`, `AIDA_DIR`,
-`CLI11_INCLUDE_DIR`, and `STB_INCLUDE_DIR`. Boost is required.
+and `CLI11_INCLUDE_DIR`. Boost is required.
 `-DPRUNING_WITH_AIDA=OFF` omits the AIDA library integration.
 
 `main.cpp` shows the workflow: read the module, choose epsilon, prune, and select

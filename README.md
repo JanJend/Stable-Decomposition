@@ -130,7 +130,7 @@ The original matrix `pruning_pair` and `pruning` in `src/pruning.cpp` contain no
 profiling code. `src/pruning_profiled.cpp` holds their instrumented copy, used
 only for comparisons; algorithm changes must be kept in sync between the two.
 
-The C++ image renderer lives in `Persistence-Algebra/include/grlina/mod_hilbert_plot.hpp`.
+The C++ image renderer lives in `Persistence-Algebra/include/grlina/invariants/hilbert_plot.hpp`.
 Like `visualisation/visualise_reso.py`, it uses a logarithmic light-blue/blue/black
 scale for positive dimensions and white for zero. Both images use the same grid
 and colour scale, rounded axis ticks and integer dimension labels. Small sampling

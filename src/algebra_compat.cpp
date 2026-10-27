@@ -1,7 +1,8 @@
 #include "algebra_compat.hpp"
 #include "progress.hpp"
-#include <grlina/mod_presentations.hpp>
+#include <grlina/module/submodule.hpp>
 #include <grlina/hom_interface.hpp>
+#include <grlina/matrices/matrix_algorithms.hpp>
 
 namespace stable_decomposition {
 void matrix_reduction(vec<Mat>& A, vec<Mat>& B) {
@@ -26,7 +27,10 @@ Mat shifting_morphism(Mat A, double amount) {
     return graded_linalg::canonical_shift_lift(A, {amount, amount});
 }
 bool image_contained_in_image(const Mat& A, const Mat& B) {
-    return graded_linalg::image_contained_in_image(A, B);
+    Mat presentation = graded_linalg::empty_matrix_like(B, 0, B.get_num_rows());
+    presentation.row_degrees = B.row_degrees;
+    auto parent = std::make_shared<const Module>(std::move(presentation));
+    return Submodule(parent, B).contains(Submodule(parent, A));
 }
 bool present_same_submodule(const Mat& M, const Mat& A, const Mat& B) {
     return graded_linalg::present_same_submodule(M, A, B);

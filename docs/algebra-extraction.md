@@ -32,15 +32,18 @@ was removed or updated.
 | `reduce_submodule` | adapter to `Submodule::minimize_generators` |
 | `shifting_morphism` | `canonical_shift_lift`; `Homomorphism::canonical_shift` |
 | shifting an existing map | `Homomorphism::shifted`, including all stored lifts |
-| `image_contained_in_image` | exact degree-admissible linear system for a free target |
+| `image_contained_in_image` | legacy adapter to `Submodule::contains` in a shared free parent |
 | `present_same_submodule` | `Submodule::equals`, including parent relations |
 | containment in a presented parent | `Submodule::contains`, `is_contained_in` |
 | `image(f,A,B,U)` (previously only declared) | `Homomorphism::image(submodule)` |
 | `timed_with_progress` | shared exception-safe implementation in `grlina/general.hpp` |
 
-Presentation-level adapters live in `grlina/mod_presentations.hpp`, also
-available through `grlina/mod_modules.hpp`. Object operations live in `mod_submodule.hpp`
-and `homomorphism.hpp`. All matrix templates require the graded CRTP contract.
+Submodule containment is `S.contains(T)` in `grlina/module/submodule.hpp`;
+both submodules must have the same parent object. Equality checks containment
+in both directions. Presentation-level adapters live in the same header and
+are also available through `grlina/graded_linalg.hpp`. Object operations
+live in `module/submodule.hpp`, `hom_core_class.hpp`, and `hom_interface.hpp`.
+All matrix templates require the graded CRTP contract.
 Old Stable-Decomposition function signatures remain available through
 `pruning.hpp` and link via `stable_pruning`; their mathematical implementations
 are no longer duplicated here.
@@ -127,7 +130,7 @@ as a matrix template. `pruning.hpp` exposes it alongside the compiled R2 wrapper
 
 ```cpp
 #include "pruning.hpp"
-#include <grlina/mat_grid.hpp>
+#include <grlina/matrices/grid.hpp>
 
 using Matrix = graded_linalg::GridGradedSparseMatrix<double, 2, int>;
 using Module = graded_linalg::Module<Matrix>;

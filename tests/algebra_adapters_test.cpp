@@ -1,3 +1,4 @@
+#include <grlina/invariants/hilbert_function.hpp>
 #include <doctest/doctest.h>
 #include "pruning.hpp"
 
@@ -33,8 +34,8 @@ TEST_CASE("empty additional lift family terminates quick pruning") {
     CHECK(pair.first.data == graded_linalg::array<int>({{0}}));
     CHECK(pair.second.get_num_cols() == 0);
     auto result = sd::pruning(sd::Module(square), 0, true);
-    CHECK(result.dimension_at({0.5,0.5}) == 1);
-    CHECK(result.dimension_at({1,0}) == 0);
+    CHECK(dimension_at(result, {0.5,0.5}) == 1);
+    CHECK(dimension_at(result, {1,0}) == 0);
 }
 
 TEST_CASE("timing utility joins on success and exception") {

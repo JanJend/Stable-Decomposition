@@ -11,13 +11,14 @@
 #include "epsilon.hpp"
 #include "progress.hpp"
 #include <grlina/hom_interface.hpp>
-#include <grlina/mat_csc.hpp>
-#include <grlina/mat_grid.hpp>
-#include <grlina/mat_coord.hpp>
+#include <grlina/storage/csc.hpp>
+#include <grlina/matrices/grid.hpp>
+#include <grlina/matrices/coord.hpp>
 #include <cmath>
 #include <limits>
 #include <stdexcept>
 #include <type_traits>
+#include <grlina/matrices/matrix_algorithms.hpp>
 
 namespace stable_decomposition {
 
@@ -70,12 +71,11 @@ auto convert_module_storage(const graded_linalg::Module<Matrix>& module) {
         return graded_linalg::ChainComplex<ResultMatrix>(std::move(maps));
     };
     auto result = graded_linalg::Module<ResultMatrix>::from_projective_resolution(
-        convert_complex(module.projective_resolution()),
-        module.has_complete_projective_resolution()
+        convert_complex(module.proj_res_),
+        module.res_complete_
             ? graded_linalg::ResolutionCompleteness::complete
             : graded_linalg::ResolutionCompleteness::truncated);
-    if (module.has_injective_resolution())
-        result.set_injective_resolution(convert_complex(module.injective_resolution()));
+    result.inj_res_ = convert_complex(module.inj_res_);
     return result;
 }
 

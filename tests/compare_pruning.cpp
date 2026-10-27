@@ -1,6 +1,7 @@
 // Compare matrix and module pruning, including an exact isomorphism decision.
+#include <grlina/invariants/hilbert_function.hpp>
 #include "pruning.hpp"
-#include <grlina/mod_isomorphism.hpp>
+#include <grlina/isomorphism_test.hpp>
 
 #include <algorithm>
 #include <chrono>
@@ -13,6 +14,7 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <grlina/matrices/matrix_algorithms.hpp>
 
 namespace sd = stable_decomposition;
 using DegreeCounts = std::map<graded_linalg::r2degree, std::size_t>;
@@ -119,10 +121,10 @@ bool compare_file(const std::filesystem::path& path, double epsilon, bool quick)
     sd::Module old_min = old_result, new_min = new_result;
     old_min.minimize();
     new_min.minimize();
-    std::cout << "Minimized generators: old=" << old_min.number_of_generators()
-              << ", new=" << new_min.number_of_generators()
-              << "; relations: old=" << old_min.number_of_relations()
-              << ", new=" << new_min.number_of_relations() << '\n';
+    std::cout << "Minimized generators: old=" << old_min.num_of_gens()
+              << ", new=" << new_min.num_of_gens()
+              << "; relations: old=" << old_min.num_of_rels()
+              << ", new=" << new_min.num_of_rels() << '\n';
     bool pass = compare_degrees("Generator degree multiset (beta_0)",
         degree_counts(old_min.presentation().row_degrees), degree_counts(new_min.presentation().row_degrees));
     const bool relations_equal = compare_degrees("Relation degree multiset (beta_1)",
@@ -134,8 +136,8 @@ bool compare_file(const std::filesystem::path& path, double epsilon, bool quick)
     std::size_t mismatches = 0;
     for (double x : xs.values) {
         for (double y : ys.values) {
-            const auto old_dim = old_result.dimension_at({x, y});
-            const auto new_dim = new_result.dimension_at({x, y});
+            const auto old_dim = dimension_at(old_result, {x, y});
+            const auto new_dim = dimension_at(new_result, {x, y});
             if (old_dim != new_dim && mismatches++ < 8)
                 std::cout << "  Fibre mismatch at (" << x << ", " << y
                           << "): old=" << old_dim << ", new=" << new_dim << '\n';

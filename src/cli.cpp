@@ -1,8 +1,9 @@
+#include <grlina/invariants/hilbert_function.hpp>
 #include "cli.hpp"
 #include "pruning.hpp"
 #define STB_IMAGE_WRITE_IMPLEMENTATION
-#include <grlina/mod_hilbert_plot.hpp>
-#include <grlina/mod_isomorphism.hpp>
+#include <grlina/invariants/hilbert_plot.hpp>
+#include <grlina/isomorphism_test.hpp>
 #ifdef PRUNING_WITH_AIDA
 #include <aida_interface.hpp>
 #endif
@@ -10,6 +11,7 @@
 #include <fstream>
 #include <map>
 #include <sstream>
+#include <grlina/matrices/matrix_algorithms.hpp>
 
 namespace stable_decomposition {
 namespace fs = std::filesystem;
@@ -32,8 +34,8 @@ void write_module(const Module& module, const fs::path& path) {
 
 
 void write_hilbert_images(Module& input, Module& output, const fs::path& prefix, int size) {
-    auto degrees = input.support_degrees();
-    const auto output_degrees = output.support_degrees();
+    auto degrees = support_degrees(input);
+    const auto output_degrees = support_degrees(output);
     degrees.insert(degrees.end(), output_degrees.begin(), output_degrees.end());
     if (degrees.empty()) degrees.push_back({0,0});
     double xmin=degrees[0][0], xmax=xmin, ymin=degrees[0][1], ymax=ymin;
@@ -54,8 +56,8 @@ void write_hilbert_images(Module& input, Module& output, const fs::path& prefix,
     // would omit syzygies and can give incorrect dimensions.
     input.compute_projective_resolution();
     output.compute_projective_resolution();
-    const auto before = input.hilbert_function_on_grid(xs,ys);
-    const auto after = output.hilbert_function_on_grid(xs,ys);
+    const auto before = hilbert_function_on_grid(input, xs,ys);
+    const auto after = hilbert_function_on_grid(output, xs,ys);
     int positive_min=std::numeric_limits<int>::max(), positive_max=0;
     for (const auto* grid : {&before,&after}) for (const auto& row : grid->values) for (int value : row)
         if (value > 0) { positive_min=std::min(positive_min,value); positive_max=std::max(positive_max,value); }
@@ -78,7 +80,7 @@ Decomposition decompose(const Module& module, const fs::path& path = {}) {
     Decomposition result;
     aida::Module working{aida::GradedMatrix(module.presentation())};
     working.minimize(); // AIDA requires a minimal presentation.
-    if (working.number_of_generators() != 0) {
+    if (working.num_of_gens() != 0) {
         working.sort_compatibly();
         aida::AIDA_functor decomposer;
         decomposer.config.sort = true;
@@ -102,7 +104,7 @@ Decomposition decompose(const Module& module, const fs::path& path = {}) {
         std::ostringstream key;
         key << std::setprecision(17);
         for (auto sorted : {summand.presentation().real_row_degrees(), summand.presentation().real_col_degrees()}) {
-            std::sort(sorted.begin(),sorted.end(),graded_linalg::Degree_traits<aida::RealDegree>::lex_lambda());
+            std::sort(sorted.begin(),sorted.end(),graded_linalg::Degree_traits<aida::GridD>::lex_lambda());
             key << '[';
             for (const auto& d : sorted) key << '(' << d[0] << ',' << d[1] << ')';
             key << ']';

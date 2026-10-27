@@ -1,10 +1,11 @@
 // Instrumented copy of matrix pruning. Keep the algorithm in sync with pruning.cpp.
 #include "pruning.hpp"
 #include <grlina/hom_interface.hpp>
-#include <grlina/mod_presentations.hpp>
+#include <grlina/module/submodule.hpp>
 #include <algorithm>
 #include <numeric>
 #include <random>
+#include <grlina/matrices/matrix_algorithms.hpp>
 
 namespace stable_decomposition {
 using namespace graded_linalg;
@@ -31,6 +32,7 @@ std::pair<Mat, Mat> pruning_pair_profiled(Mat &M, const double epsilon, const bo
   // No additional maps impose constraints: I=M, K=0. In particular, the
   // quick-loop stopping criterion has no counter to visit when B is empty.
   if (B.empty()) return {graded_linalg::all_submodule(M), graded_linalg::zero_submodule(M)};
+  auto parent = std::make_shared<const Module>(M);
   Mat I = graded_linalg::all_submodule(M);                         // generators of Iᵢ ⊆ M, initialized I₀ = M ⊆ M
   int iteration_I = 1;
   std::vector<size_t> B_indices(B.size());
@@ -82,9 +84,7 @@ std::pair<Mat, Mat> pruning_pair_profiled(Mat &M, const double epsilon, const bo
       // Break if we have gone one full run through all f without any change.
       // Check 5 times per run through B (5 is completely arbitrary)
       if(quick && (B.size() - 1 - counter) % one_fifth == 0){
-        Mat MI_new = M;
-        MI_new.append_matrix(I_new);
-        if(!measure(profile, &PruningProfile::i_equal, [&] { return graded_linalg::image_contained_in_image(last_changed_I_new, MI_new); })){
+        if(!measure(profile, &PruningProfile::i_equal, [&] { return Submodule(parent, I_new).contains(Submodule(parent, last_changed_I_new)); })){
           last_changed_I_new = I_new;
           last_changed_iteration = counter;
           continue;
@@ -106,19 +106,17 @@ std::pair<Mat, Mat> pruning_pair_profiled(Mat &M, const double epsilon, const bo
       iteration_I++;
       continue;
     }
-    Mat MI_new = M;
-    MI_new.append_matrix(I_new);
-    if(measure(profile, &PruningProfile::i_equal, [&] { return graded_linalg::image_contained_in_image(I, MI_new); })){
+    if(measure(profile, &PruningProfile::i_equal, [&] { return Submodule(parent, I_new).contains(Submodule(parent, I)); })){
       break;
     }
     /* H: Could add the following check
-    if (graded_linalg::image_contained_in_image(I_new, M)){
+    if (Submodule(parent, I_new).is_zero()){
       Mat zro = graded_linalg::zero_submodule(M);
       return {zro, zro};
     }*/
     //if (graded_linalg::present_same_submodule(M, I_new, I))        // run until stationary
                                                     // H: I_new should automatically be a submod of I, so it
-                                                    // should be enough to run image_contained_in_image once
+                                                    // should be enough to call contains once
                                                     // instead of twice, like it is in present_same_submodule
     //  break;
     I = I_new;
@@ -168,9 +166,7 @@ std::pair<Mat, Mat> pruning_pair_profiled(Mat &M, const double epsilon, const bo
       // Break if we have gone one full run through all f without any change.
       // Check 5 times per run through B (5 is completely arbitrary)
       if(quick && (B.size() - 1 - counter) % one_fifth == 0){
-        Mat Mlast = M;
-        Mlast.append_matrix(last_changed_K_new);
-        if(!measure(profile, &PruningProfile::k_equal, [&] { return graded_linalg::image_contained_in_image(K_new, Mlast); })){
+        if(!measure(profile, &PruningProfile::k_equal, [&] { return Submodule(parent, last_changed_K_new).contains(Submodule(parent, K_new)); })){
           last_changed_K_new = K_new;
           last_changed_iteration = counter;
           continue;
@@ -192,9 +188,7 @@ std::pair<Mat, Mat> pruning_pair_profiled(Mat &M, const double epsilon, const bo
       iteration_K++;
       continue;
     }
-    Mat MK = M;
-    MK.append_matrix(K);
-    if(measure(profile, &PruningProfile::k_equal, [&] { return graded_linalg::image_contained_in_image(K_new, MK); }))
+    if(measure(profile, &PruningProfile::k_equal, [&] { return Submodule(parent, K).contains(Submodule(parent, K_new)); }))
     //if (graded_linalg::present_same_submodule(M, K_new, K))
       break;
     std::swap(K, K_new);

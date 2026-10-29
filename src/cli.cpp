@@ -1,7 +1,7 @@
+#define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <grlina/invariants/hilbert_function.hpp>
 #include "cli.hpp"
 #include "pruning.hpp"
-#define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <grlina/invariants/hilbert_plot.hpp>
 #include <grlina/isomorphism_test.hpp>
 #ifdef PRUNING_WITH_AIDA
@@ -56,16 +56,18 @@ void write_hilbert_images(Module& input, Module& output, const fs::path& prefix,
     // would omit syzygies and can give incorrect dimensions.
     input.compute_projective_resolution();
     output.compute_projective_resolution();
-    const auto before = hilbert_function_on_grid(input, xs,ys);
-    const auto after = hilbert_function_on_grid(output, xs,ys);
+    const auto before = input.hilbert_function();
+    const auto after = output.hilbert_function();
     int positive_min=std::numeric_limits<int>::max(), positive_max=0;
     for (const auto* grid : {&before,&after}) for (const auto& row : grid->values) for (int value : row)
         if (value > 0) { positive_min=std::min(positive_min,value); positive_max=std::max(positive_max,value); }
     if (positive_max == 0) positive_min=1;
     const auto before_path=prefix.string()+"_input_hilbert.png";
     const auto after_path=prefix.string()+"_output_hilbert.png";
-    graded_linalg::save_hilbert_png(before,before_path,positive_min,positive_max,"Input Hilbert function");
-    graded_linalg::save_hilbert_png(after,after_path,positive_min,positive_max,"Output Hilbert function");
+    graded_linalg::save_png(graded_linalg::hilbert_function_image(before, xs, ys, size, size,
+        positive_min, positive_max, "Input Hilbert function"), before_path);
+    graded_linalg::save_png(graded_linalg::hilbert_function_image(after, xs, ys, size, size,
+        positive_min, positive_max, "Output Hilbert function"), after_path);
     std::cout << "Saved Hilbert images: " << before_path << "\n                      " << after_path << '\n';
 }
 
@@ -82,7 +84,7 @@ Decomposition decompose(const Module& module, const fs::path& path = {}) {
     working.minimize(); // AIDA requires a minimal presentation.
     if (working.num_of_gens() != 0) {
         working.sort_compatibly();
-        aida::AIDA_functor decomposer;
+        aida::AIDA_functor<> decomposer;
         decomposer.config.sort = true;
         decomposer(working,result.blocks);
     }

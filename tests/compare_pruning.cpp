@@ -136,8 +136,8 @@ bool compare_file(const std::filesystem::path& path, double epsilon, bool quick)
     std::size_t mismatches = 0;
     for (double x : xs.values) {
         for (double y : ys.values) {
-            const auto old_dim = dimension_at(old_result, {x, y});
-            const auto new_dim = dimension_at(new_result, {x, y});
+            const auto old_dim = old_result.dimension_at({x, y});
+            const auto new_dim = new_result.dimension_at({x, y});
             if (old_dim != new_dim && mismatches++ < 8)
                 std::cout << "  Fibre mismatch at (" << x << ", " << y
                           << "): old=" << old_dim << ", new=" << new_dim << '\n';

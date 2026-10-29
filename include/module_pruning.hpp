@@ -25,8 +25,8 @@ namespace stable_decomposition {
 // Grid matrices distinguish geometric shifts from stored index degrees.
 template <typename Matrix>
 auto diagonal_translation(const Matrix&, double amount) ->
-    graded_linalg::matrix_geometry_degree_t<Matrix> {
-    using Degree = graded_linalg::matrix_geometry_degree_t<Matrix>;
+    typename Matrix::degree_type {
+    using Degree = typename Matrix::degree_type;
     using Scalar = typename Degree::value_type;
     if constexpr (std::is_integral_v<Scalar>) {
         if (std::trunc(amount) != amount ||
@@ -44,12 +44,12 @@ auto diagonal_translation(const Matrix&, double amount) ->
 // at the boundary, retaining their physical degrees and resolution maps.
 template <typename Matrix>
 inline constexpr bool editable_conversion_required =
-    std::is_same_v<typename Matrix::storage_type,
-                   graded_linalg::CSCStorage<typename Matrix::index_type>>;
+    std::is_same_v<graded_linalg::matrix_storage_t<Matrix>,
+                   graded_linalg::CSCStorage<graded_linalg::matrix_index_t<Matrix>>>;
 
 template <class Storage, class Matrix>
 auto convert_matrix_storage(const Matrix& matrix) {
-    using Index = typename Matrix::index_type;
+    using Index = graded_linalg::matrix_index_t<Matrix>;
     using Result = graded_linalg::R2GradedSparseMatrix<Index, Storage>;
     graded_linalg::array<Index> columns;
     columns.reserve(matrix.get_num_cols());
@@ -89,7 +89,7 @@ pruning_pair(const graded_linalg::Module<Matrix>& X,
 
     if constexpr (editable_conversion_required<Matrix>) {
         auto original = X.shared_from_this();
-        using EditableStorage = graded_linalg::vec<graded_linalg::vec<typename Matrix::index_type>>;
+        using EditableStorage = graded_linalg::vec<graded_linalg::vec<graded_linalg::matrix_index_t<Matrix>>>;
         auto editable = convert_module_storage<EditableStorage>(X);
         auto parent = std::make_shared<const decltype(editable)>(std::move(editable));
         auto [I, K] =
@@ -98,11 +98,11 @@ pruning_pair(const graded_linalg::Module<Matrix>& X,
         // embeddings; their optional presentation cache is computed on demand.
         return {graded_linalg::Submodule<Matrix>(
                     original,
-                    convert_matrix_storage<typename Matrix::storage_type>(
+                    convert_matrix_storage<graded_linalg::matrix_storage_t<Matrix>>(
                         I.generator_map().generator_lift())),
                 graded_linalg::Submodule<Matrix>(
                     original,
-                    convert_matrix_storage<typename Matrix::storage_type>(
+                    convert_matrix_storage<graded_linalg::matrix_storage_t<Matrix>>(
                         K.generator_map().generator_lift()))};
     } else {
 
@@ -215,11 +215,11 @@ graded_linalg::Module<Matrix> pruning(graded_linalg::Module<Matrix> X,
                                       bool quick = false,
                                       PruningProfile* profile = nullptr) {
     if constexpr (editable_conversion_required<Matrix>) {
-        using EditableStorage = graded_linalg::vec<graded_linalg::vec<typename Matrix::index_type>>;
+        using EditableStorage = graded_linalg::vec<graded_linalg::vec<graded_linalg::matrix_index_t<Matrix>>>;
         auto editable = convert_module_storage<EditableStorage>(X);
         auto result = stable_decomposition::pruning(
             std::move(editable), epsilon, quick, profile);
-        return convert_module_storage<typename Matrix::storage_type>(result);
+        return convert_module_storage<graded_linalg::matrix_storage_t<Matrix>>(result);
     } else {
         using Module = graded_linalg::Module<Matrix>;
         if (profile)

@@ -19,10 +19,10 @@ TEST_CASE("zero-scale pruning preserves a square interval") {
     using namespace stable_decomposition;
     Mat square(2, 1, {{0}, {0}}, {{0,1}, {1,0}}, {{0,0}});
     Module result = pruning(Module(square), 0.0);
-    CHECK(dimension_at(result, {0,0}) == 1);
-    CHECK(dimension_at(result, {0.5,0.5}) == 1);
-    CHECK(dimension_at(result, {1,0}) == 0);
-    CHECK(dimension_at(result, {0,1}) == 0);
+    CHECK(result.dimension_at({0,0}) == 1);
+    CHECK(result.dimension_at({0.5,0.5}) == 1);
+    CHECK(result.dimension_at({1,0}) == 0);
+    CHECK(result.dimension_at({0,1}) == 0);
     CHECK(result.presentation().data == graded_linalg::array<int>({{0}, {0}}));
 }
 

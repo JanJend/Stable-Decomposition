@@ -6,3 +6,4 @@ The solutions with name [filename]_pru[pruning parameter].scc where the pruning 
 test4.scc is a version of the example from the original pruning paper.
 
 // H: the 1-pruning of test1 is the zero module, so the solution is correct in that sense. But shouldn't it still contain a preamble before the empty presentation?
+// J: Yes, thank you, I will have a look at this bug.

@@ -46,8 +46,8 @@ TEST_CASE("epsilon controls the doubled iteration shift and final half shift") {
         CHECK(graded_linalg::present_same_submodule(births, pair.first, expected_I));
         auto high = pruning(Module(births), 0.5, quick);
         CHECK(high.presentation().row_degrees == graded_linalg::vec<graded_linalg::r2degree>({{1.5,1.5}, {1.5,1.5}}));
-        CHECK(dimension_at(high, {1.25,1.25}) == 0);
-        CHECK(dimension_at(high, {1.5,1.5}) == 2);
+        CHECK(high.dimension_at({1.25,1.25}) == 0);
+        CHECK(high.dimension_at({1.5,1.5}) == 2);
     }
 }
 

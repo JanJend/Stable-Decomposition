@@ -1,6 +1,7 @@
 #pragma once
 #include <grlina/general.hpp>
 #include <chrono>
+#include "pruning_options.hpp"
 
 namespace stable_decomposition {
 using graded_linalg::timed_with_progress;
@@ -13,10 +14,14 @@ struct PruningTiming {
 
 struct PruningProfile {
     int i_iterations = 0, k_iterations = 0;
+    std::size_t original_maps = 0, quotient_dimension = 0, end_dimension = 0;
+    std::size_t i_maps = 0, k_maps = 0;
+    std::size_t i_phase_candidates = 0, i_phase_kept = 0, k_phase_candidates = 0, k_phase_kept = 0;
     PruningTiming total, basis, i_phase, k_phase;
     PruningTiming i_preimage, k_preimage, i_image, k_image;
     PruningTiming i_intersection, k_sum, i_reduce, k_reduce, i_equal, k_equal;
     PruningTiming quotient, presentation, minimize;
+    PruningTiming i_phase_quotient, k_phase_quotient, i_target_prepare;
 };
 
 // A null destination leaves ordinary runs uninstrumented (no clock reads).
@@ -45,4 +50,6 @@ decltype(auto) measure(PruningProfile* profile, PruningTiming PruningProfile::* 
 }
 
 void print_pruning_comparison(std::ostream& out, const PruningProfile& matrix, const PruningProfile& module);
+void print_module_pruning_profile(std::ostream& out, const PruningProfile& profile,
+                                  const PruningOptions& options);
 } // namespace stable_decomposition

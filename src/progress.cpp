@@ -3,6 +3,55 @@
 
 namespace stable_decomposition {
 
+void print_module_pruning_profile(std::ostream& out, const PruningProfile& profile,
+                                  const PruningOptions& options) {
+  const auto flags = out.flags();
+  const auto precision = out.precision();
+  out << "\nModule pruning options (0=off, 1=on):"
+      << " fuse_i_preimage=" << int(options.fuse_i_preimage)
+      << " defer_k_image_minimization=" << int(options.defer_k_image_minimization)
+      << " projected_preimages=" << int(options.projected_preimages)
+      << " dense_kernel_pivots=" << int(options.dense_kernel_pivots)
+      << " throttle_progress=" << int(options.throttle_progress)
+      << " composition_generators=" << int(options.composition_generators)
+      << " amortize_reductions=" << int(options.amortize_reductions)
+      << " hom_classes=" << int(options.hom_classes)
+      << " phase_quotient=" << int(options.phase_quotient)
+      << " reuse_target_reductions=" << int(options.reuse_target_reductions) << '\n'
+      << "I iterations: " << profile.i_iterations << "; K iterations: " << profile.k_iterations << '\n'
+      << "Original lift quotient: " << profile.original_maps
+      << "; I maps: " << profile.i_maps << "; K maps: " << profile.k_maps << '\n';
+  if (options.composition_generators || options.hom_classes)
+    out << "Actual End dimension: " << profile.end_dimension
+        << "; Hom/eta End dimension: " << profile.quotient_dimension << '\n';
+  if (options.phase_quotient)
+    out << "Phase map restrictions retained (all passes): I " << profile.i_phase_kept
+        << '/' << profile.i_phase_candidates << "; K " << profile.k_phase_kept
+        << '/' << profile.k_phase_candidates << '\n';
+  out
+      << std::fixed << std::setprecision(6) << std::left << std::setw(26) << "Operation"
+      << std::right << std::setw(10) << "Calls" << std::setw(14) << "Seconds" << '\n';
+  auto row = [&](const char* label, const PruningTiming& timing) {
+    out << std::left << std::setw(26) << label << std::right
+        << std::setw(10) << timing.calls << std::setw(14) << timing.seconds << '\n';
+  };
+  row("Total", profile.total);
+  row("End_2eps/0", profile.basis);
+  row("I phase", profile.i_phase); row("K phase", profile.k_phase);
+  row("I target preparation", profile.i_target_prepare);
+  row("I phase quotient", profile.i_phase_quotient); row("K phase quotient", profile.k_phase_quotient);
+  row("I preimage", profile.i_preimage); row("I intersection", profile.i_intersection);
+  row("I image / composition", profile.i_image); row("I generator reduction", profile.i_reduce);
+  row("I convergence check", profile.i_equal); row("K preimage", profile.k_preimage);
+  row("K image / composition", profile.k_image); row("K sum", profile.k_sum);
+  row("K generator reduction", profile.k_reduce);
+  row("K convergence check", profile.k_equal); row("Quotient", profile.quotient);
+  row("Presentation", profile.presentation); row("Minimization", profile.minimize);
+  out << "Phase times include progress output. Operation times include internal minimization.\n";
+  out.flags(flags);
+  out.precision(precision);
+}
+
 void print_pruning_comparison(std::ostream& out, const PruningProfile& matrix, const PruningProfile& module) {
   const auto flags = out.flags();
   const auto precision = out.precision();

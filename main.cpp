@@ -1,6 +1,7 @@
 #include "cli.hpp"
 #include "pruning.hpp"
 #include "utils.hpp"
+#include "process_memory_guard.hpp"
 #include <iostream>
 
 using namespace stable_decomposition;
@@ -10,6 +11,7 @@ int main(int argc, char** argv) {
     try {
         const auto options = parse_arguments(argc, argv);
         if (options.help) return 0;
+        ProcessMemoryGuard memory(options.memory_limit_mb);
 #ifndef PRUNING_WITH_AIDA
         if (options.aida)
             throw std::runtime_error("AIDA support is disabled; rebuild with -DPRUNING_WITH_AIDA=ON");
@@ -38,7 +40,13 @@ int main(int argc, char** argv) {
             Mat presentation = input.presentation(); // Matrix pruning modifies its input.
             output = Module(pruning(presentation, epsilon, options.quick));
         } else {
-            output = pruning(input, epsilon, false);
+            PruningProfile profile;
+            output = pruning(input, epsilon, false, options.profile ? &profile : nullptr,
+                             options.pruning_options);
+            if (options.profile) {
+                std::cout << "Column storage: " << column_storage << '\n';
+                print_module_pruning_profile(std::cout, profile, options.pruning_options);
+            }
         }
 
         if (!options.no_output) {

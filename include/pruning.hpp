@@ -4,16 +4,15 @@
 #include "algebra_compat.hpp"
 #include "epsilon.hpp"
 #include "progress.hpp"
+#include "pruning_options.hpp"
 
 namespace stable_decomposition {
 
-using Module = graded_linalg::R2Module<index_t>;
-using Submodule = graded_linalg::Submodule<Mat>;
+std::pair<Submodule, Submodule> pruning_pair(const Module& module, double epsilon, const bool quick = false,
+                                          PruningProfile* profile = nullptr, const PruningOptions& options = {});
 
-
-std::pair<Submodule, Submodule> pruning_pair(const Module& module, double epsilon, const bool quick = false, PruningProfile* profile = nullptr);
-
-Module pruning(Module module, double epsilon, bool quick = false, PruningProfile* profile = nullptr);
+Module pruning(Module module, double epsilon, bool quick = false, PruningProfile* profile = nullptr,
+               const PruningOptions& options = {});
 
 /** Compute the epsilon-pruning pair using M(2 epsilon) and its structure map.
  * Matrix columns use the parent's F0 basis. Epsilon is finite and nonnegative.

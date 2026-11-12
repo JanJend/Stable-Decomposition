@@ -157,11 +157,11 @@ runs the native two-parameter kernel on each slice, then lifts and filters its
 generators. The number of slices can grow exponentially. These generators need
 not form a free module, so completing a resolution may require repeated kernels.
 
-`tests/dynamic_grid_pruning_test.cpp` compares the shared algorithm against R2
+`tests/functional/dynamic_grid_pruning_test.cpp` compares the shared algorithm against R2
 using nonuniform grids and fractional shifts, including one- and three-parameter
 instantiations. It also
 checks independent grids, canonical maps, epsilon functors, resolutions and
-Hilbert queries. `tests/csc_pruning_boundary_test.cpp` runs with CSC runtime
+Hilbert queries. `tests/functional/csc_pruning_boundary_test.cpp` runs with CSC runtime
 performance diagnostics enabled and checks that pruning produces no mutation
 warnings, preserves input storage, and returns pair embeddings with their
 original parent lifetime. The command-line entry points retain their existing

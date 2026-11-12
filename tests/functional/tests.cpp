@@ -2,7 +2,7 @@
 #include <grlina/invariants/hilbert_function.hpp>
 #include <doctest/doctest.h>
 #include <string>
-#include "../include/pruning.hpp"
+#include "pruning.hpp"
 
 TEST_CASE("submodule syzygies preserve ambient coordinates") {
     using namespace stable_decomposition;
@@ -45,14 +45,5 @@ TEST_CASE("test1.scc") {
     CHECK(K.parent() == parent);
     CHECK(I.generator_map().generator_lift().row_degrees == parent->presentation().row_degrees);
     CHECK(K.generator_map().generator_lift().row_degrees == parent->presentation().row_degrees);
-
-    //TODO F: One cannot really check if P and P_expected present isomorphic modules, because that's a hard problem.
-    //        Testing if two matrices span /identical/ submodules or subquotients of a given module should be easier;
-    //        for example, one can do:
-    // 
-    // auto [I, K] = pruning_pair(M, epsilon);
-    // Mat I_expected(...), K_expected(...);
-    // CHECK(present_same_submodule(M, I, I_expected));
-    // CHECK(present_same_submodule(M, K, K_expected));
 
 }

@@ -34,12 +34,13 @@ graded_linalg::r2degree pruning_shift(double epsilon) {
 }
 
 // Preserve the existing compiled R2 entry points.
-std::pair<Submodule, Submodule> pruning_pair(const Module& X, double epsilon, bool quick, PruningProfile* profile) {
-  return stable_decomposition::pruning_pair<Mat>(X, epsilon, quick, profile);
+std::pair<Submodule, Submodule> pruning_pair(const Module& X, double epsilon, bool quick,
+                                         PruningProfile* profile, const PruningOptions& options) {
+  return stable_decomposition::pruning_pair<Mat>(X, epsilon, quick, profile, options);
 }
 
-Module pruning(Module X, double epsilon, bool quick, PruningProfile* profile) {
-  return stable_decomposition::pruning<Mat>(std::move(X), epsilon, quick, profile);
+Module pruning(Module X, double epsilon, bool quick, PruningProfile* profile, const PruningOptions& options) {
+  return stable_decomposition::pruning<Mat>(std::move(X), epsilon, quick, profile, options);
 }
 
 std::pair<Mat, Mat> pruning_pair(Mat &M, const double epsilon, const bool quick) {

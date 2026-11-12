@@ -1,0 +1,14 @@
+__pycache__/
+
+# Generated inputs; curated fixtures live in ../test_presentations/.
+/point-sets/
+/test_presentations/
+/manifest.csv
+/manifest.tmp
+/paper_data/
+
+# Generated benchmark results and recorded runs.
+/results.csv
+/optimization_scaling/
+/paper_results/
+/paper_runs/

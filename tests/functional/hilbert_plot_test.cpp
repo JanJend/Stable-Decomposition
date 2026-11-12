@@ -31,7 +31,7 @@ int stbi_write_png_to_func(stbi_write_func* write, void* context, int w, int h,
 int main() {
     try {
         using namespace graded_linalg;
-        const std::array<unsigned char,3> white{255,255,255}, low{212,234,255}, high{0,0,0};
+        const std::array<unsigned char,3> white{255,255,255}, low = hilbert_colour(0), high = hilbert_colour(1);
         HilbertFunction<double,int> function{{-1,0,1},{-2,0,2},{{0,1,1},{10,100,100},{10,100,100}},100};
         const auto bytes = hilbert_function_image(function,400,300,1,100);
         require(bytes == std::vector<unsigned char>({137,'P','N','G'}));
@@ -68,18 +68,18 @@ int main() {
         Module<R2GradedSparseMatrix<int>> module(R2GradedSparseMatrix<int>(0,2,{}, {}, {{0,0},{1,0}}));
         module.hilbert_function_image({0.5,2},{0,2},400,300);
         require(colour(100,200) == low && colour(400,200) == high);
-        // Landscape heights use a linear white-to-blue scale. Two free
+        // Landscape heights use the Hilbert palette on a linear scale. Two free
         // summands distinguish layer 1 from layer 2 at the same coordinate.
         const Landscape landscape(Module<R2GradedSparseMatrix<int>>(
             R2GradedSparseMatrix<int>(0,2,{}, {}, {{0,0},{0.5,0.5}})), {0,0,1,1}, 0.25);
-        const std::array<unsigned char,3> quarter{191,191,255}, blue{0,0,255};
+        const auto quarter = hilbert_colour(0.25);
         landscape.image(1,5,5);
         require(width == 270 && height == 190);
         require(colour(101,88) == quarter); // (0.25,0.25), height 0.25 of max 1
-        require(colour(104,85) == blue); // (1,1), height 1
+        require(colour(104,85) == high); // (1,1), height 1
         landscape.image(2,5,5);
         require(colour(101,88) == white); // Second summand has not been born.
-        require(colour(104,85) == blue); // Second-layer height is 0.5.
+        require(colour(104,85) == high); // Second-layer height is 0.5.
         landscape.image(3,5,5);
         for (int x=100; x<105; ++x) for (int y=85; y<90; ++y)
             require(colour(x,y) == white);

@@ -7,6 +7,10 @@ if(NOT DEFINED CMAKE_CXX_STANDARD)
 endif()
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Keep storage consistent in the CLI, tests, and embedded AIDA sources.
+option(GRLINA_USE_COMPACT_COLUMNS "Use compact columns instead of std::vector columns" ON)
+add_compile_definitions(GRLINA_USE_COMPACT_COLUMNS=$<BOOL:${GRLINA_USE_COMPACT_COLUMNS}>)
+
 # Set details for release and debug mode. Use release by default.
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
@@ -78,6 +82,7 @@ find_package(Threads REQUIRED)
 target_link_libraries(stable_pruning PUBLIC ${Boost_LIBRARIES} Threads::Threads)
 target_include_directories(stable_pruning SYSTEM PRIVATE "${CLI11_INCLUDE_DIR}")
 target_compile_definitions(stable_pruning PRIVATE PRUNING_VERSION="${PROJECT_VERSION}")
+target_compile_definitions(stable_pruning PUBLIC GRLINA_USE_COMPACT_COLUMNS=$<BOOL:${GRLINA_USE_COMPACT_COLUMNS}>)
 add_library(pruning_cli STATIC src/cli.cpp)
 target_link_libraries(pruning_cli PUBLIC stable_pruning)
 if(APPLE)
@@ -88,25 +93,47 @@ if(PRUNING_WITH_AIDA)
     target_link_libraries(pruning_cli PRIVATE aida_static)
     target_include_directories(pruning_cli BEFORE PRIVATE "${AIDA_DIR}/include" "${AIDA_DIR}/src")
     target_compile_definitions(pruning_cli PUBLIC PRUNING_WITH_AIDA=1)
+
+    # Explicit target: experiments are never part of the default build or CTest.
+    add_executable(pruning_experiment EXCLUDE_FROM_ALL experiments/support/runtime.cpp)
+    target_link_libraries(pruning_experiment PRIVATE stable_pruning aida_static)
+    target_include_directories(pruning_experiment BEFORE PRIVATE "${AIDA_DIR}/include" "${AIDA_DIR}/src")
 endif()
 add_executable(pruning main.cpp)
 set_target_properties(pruning PROPERTIES DEBUG_POSTFIX ${CMAKE_DEBUG_POSTFIX})
 target_link_libraries(pruning PRIVATE pruning_cli)
 
+# Explicit benchmark target; no AIDA dependency or generated output modules.
+add_executable(pruning_optimization_worker EXCLUDE_FROM_ALL experiments/support/optimization_runtime.cpp)
+target_link_libraries(pruning_optimization_worker PRIVATE stable_pruning)
+
 # Tests (optional)
 include(CTest)
 if(BUILD_TESTING)
-    add_executable(csc_pruning_boundary_test tests/csc_pruning_boundary_test.cpp)
+    add_executable(pruning_optimizations_test tests/functional/pruning_optimizations_test.cpp)
+    target_link_libraries(pruning_optimizations_test PRIVATE stable_pruning)
+    target_compile_definitions(pruning_optimizations_test PRIVATE
+        PRUNING_TEST_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/test_presentations"
+        PRUNING_TEST_PRESENTATIONS_DIR="${PERSISTENCE_ALGEBRA_DIR}/test_presentations")
+    add_test(NAME pruning_optimizations COMMAND pruning_optimizations_test)
+    set_tests_properties(pruning_optimizations PROPERTIES TIMEOUT 120)
+    add_executable(pruning_solutions_test tests/pruning_solutions_test.cpp)
+    target_link_libraries(pruning_solutions_test PRIVATE stable_pruning)
+    target_compile_definitions(pruning_solutions_test PRIVATE
+        PRUNING_SOLUTIONS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/test_presentations/tests_with_solutions")
+    add_test(NAME pruning_solutions COMMAND pruning_solutions_test)
+    set_tests_properties(pruning_solutions PROPERTIES TIMEOUT 120)
+    add_executable(csc_pruning_boundary_test tests/functional/csc_pruning_boundary_test.cpp)
     target_link_libraries(csc_pruning_boundary_test PRIVATE stable_pruning)
     target_compile_options(csc_pruning_boundary_test PRIVATE -UNDEBUG)
     add_test(NAME csc_pruning_boundary COMMAND csc_pruning_boundary_test)
-    add_executable(hilbert_plot_test tests/hilbert_plot_test.cpp)
+    add_executable(hilbert_plot_test tests/functional/hilbert_plot_test.cpp)
     add_test(NAME hilbert_plot COMMAND hilbert_plot_test)
     add_test(NAME pruning_cli_outputs COMMAND ${CMAKE_COMMAND}
         -DPRUNING=$<TARGET_FILE:pruning> -DWITH_AIDA=${PRUNING_WITH_AIDA} -DVERSION=${PROJECT_VERSION}
-        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli_outputs.cmake)
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/functional/cli_outputs.cmake)
     set_tests_properties(pruning_cli_outputs PROPERTIES TIMEOUT 180)
-    add_executable(compare_pruning tests/compare_pruning.cpp)
+    add_executable(compare_pruning tests/functional/compare_pruning.cpp)
     target_link_libraries(compare_pruning PRIVATE stable_pruning)
     target_compile_definitions(compare_pruning PRIVATE
         PRUNING_TEST_PRESENTATIONS_DIR="${PERSISTENCE_ALGEBRA_DIR}/test_presentations")
@@ -125,15 +152,15 @@ find_package(doctest QUIET)
 if(BUILD_TESTING AND doctest_FOUND)
     include(CTest)
     include(doctest)
-    add_executable(tests tests/tests.cpp tests/algebra_adapters_test.cpp tests/epsilon_test.cpp tests/dynamic_grid_pruning_test.cpp)
+    add_executable(tests tests/functional/tests.cpp tests/functional/algebra_adapters_test.cpp tests/functional/epsilon_test.cpp tests/functional/dynamic_grid_pruning_test.cpp)
     target_link_libraries(tests PRIVATE doctest::doctest stable_pruning)
     target_compile_definitions(tests PRIVATE
-        PRUNING_TEST_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests")
+        PRUNING_TEST_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/test_presentations")
     doctest_discover_tests(tests)
     add_test(NAME pruning_requires_input COMMAND $<TARGET_FILE:pruning>)
     set_tests_properties(pruning_requires_input PROPERTIES WILL_FAIL TRUE)
     add_test(NAME pruning_epsilon_cli COMMAND ${CMAKE_COMMAND}
-        -DPRUNING=$<TARGET_FILE:pruning> -DINPUT=${CMAKE_SOURCE_DIR}/tests/test1.scc
-        -P ${CMAKE_SOURCE_DIR}/tests/epsilon_cli.cmake)
+        -DPRUNING=$<TARGET_FILE:pruning> -DINPUT=${CMAKE_SOURCE_DIR}/test_presentations/test1.scc
+        -P ${CMAKE_SOURCE_DIR}/tests/functional/epsilon_cli.cmake)
     set_tests_properties(pruning_epsilon_cli PROPERTIES TIMEOUT 120)
 endif()

@@ -1,4 +1,21 @@
-# Comparing the two pruning implementations
+# Functional tests
+
+This folder contains the implementation, adapter, grid, storage, plotting, and
+CLI tests. Module fixtures live in `test_presentations/` at the repository root.
+The separate `tests/pruning_solutions_test.cpp` checks the hand-checked solutions.
+
+Build and run all tests from the Stable-Decomposition directory:
+
+```sh
+cmake -S . -B build -DBUILD_TESTING=ON
+cmake --build build -j 2
+ctest --test-dir build --output-on-failure
+```
+
+The `tests` target and its associated CLI checks require doctest. The standalone
+solution, comparison, storage, plotting, and CLI output tests do not.
+
+## Comparing the two pruning implementations
 
 From the Stable-Decomposition directory:
 
@@ -7,7 +24,7 @@ cmake -S . -B build/vscode-debug -DBUILD_TESTING=ON
 cmake --build build/vscode-debug --target compare_pruning -j 2
 ./build/vscode-debug/compare_pruning
 ./build/vscode-debug/compare_pruning --epsilon 0.25 toy_example_2.scc
-./build/vscode-debug/compare_pruning --epsilon 0.01 tests/test1.scc tests/test2.scc
+./build/vscode-debug/compare_pruning --epsilon 0.01 test_presentations/test1.scc test_presentations/test2.scc
 ctest --test-dir build/vscode-debug -R '^compare_pruning_' --output-on-failure
 ```
 
@@ -30,6 +47,7 @@ then compares:
   For finite presentation degrees, the full critical grid covers the regions
   where the Hilbert function can change. Axes exceeding 64 coordinates are
   sampled evenly and the report explicitly labels the grid as sampled.
+- Exact module isomorphism of the minimized outputs.
 
 Degree comparisons use exact doubles, so numerical discrepancies are visible.
 Up to eight differing degrees and eight fibre mismatches are printed per input.
@@ -41,7 +59,7 @@ It also prints the same detailed iteration/operation timing table as the main
 CLI's `--compare` option, with the usual progress bars enabled.
 Use a Release build for performance comparisons.
 
-Exit codes: **0** for matching checked invariants, **1** for a mismatch, **2** for
+Exit codes: **0** for isomorphic outputs and matching invariants, **1** for a mismatch, **2** for
 invalid arguments or a caught runtime error. Multiple inputs are all checked
 unless an underlying library assertion or abort terminates the process.
 

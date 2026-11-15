@@ -23,16 +23,19 @@ std::pair<Mat, Mat> pruning_pair_profiled(Mat &M, const double epsilon, const bo
   Mat shifted_module = M;                                      // presentation matrix for M(2ε)
   shifted_module.shift(shift);
   auto B = measure(profile, &PruningProfile::basis, [&] {
-    return timed_with_progress("End_2eps/0", [&] { return graded_linalg::End_2d_0(M, shift, true); });
+    return timed_with_progress("End_d/0", [&] { return graded_linalg::End_d_0(M, shift, true); });
   });
 
   /////////////////////////////////////////////////////////////////////
   ////////// Build the module I from the pruning pair (I,K) //////////
   /////////////////////////////////////////////////////////////////////
-  // No additional maps impose constraints: I=M, K=0. In particular, the
-  // quick-loop stopping criterion has no counter to visit when B is empty.
-  if (B.empty()) return {graded_linalg::all_submodule(M), graded_linalg::zero_submodule(M)};
   auto parent = std::make_shared<const Module>(M);
+  // No additional constraints: I=M and K=ker(eta), also in quick mode.
+  if (B.empty()) {
+    auto eta = Homomorphism<Mat>::canonical_shift(parent, shift);
+    auto kernel = measure(profile, &PruningProfile::k_preimage, [&] { return eta.kernel(); });
+    return {graded_linalg::all_submodule(M), kernel.generator_map().generator_lift()};
+  }
   Mat I = graded_linalg::all_submodule(M);                         // generators of Iᵢ ⊆ M, initialized I₀ = M ⊆ M
   int iteration_I = 1;
   std::vector<size_t> B_indices(B.size());

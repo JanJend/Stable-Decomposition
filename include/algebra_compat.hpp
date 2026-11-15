@@ -7,8 +7,8 @@ namespace stable_decomposition {
 void matrix_reduction(vec<Mat>& A, vec<Mat>& B);
 vec<Mat> homSpace(Mat& A, Mat& B);
 vec<Mat> End_2epsilon_0(Mat& M, double epsilon);
-// Historical spelling; now uses the corrected pruning shift 2*epsilon as well.
-vec<Mat> End_2d_0(Mat& M, double epsilon);
+// d is the actual diagonal shift; End_2epsilon_0 instead takes pruning epsilon.
+vec<Mat> End_d_0(Mat& X, double d);
 Mat zero_submodule(const Mat& M);
 Mat all_submodule(const Mat& M);
 Mat submodule_sum(Mat A, Mat B);

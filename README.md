@@ -95,30 +95,32 @@ for the full function mapping, behavioral notes, and tests.
 - `--no-output` - Skip the pruned SCC; requested images and AIDA results are still saved.
 - `--memory-limit-mb` - Optional sampled peak-RSS limit in MiB; zero disables it.
 - `--profile` - Print module pruning times, call counts, iteration counts and enabled optimizations.
-- `--fuse-i-preimage` - Compute the I intersection by taking a preimage on I's generator basis.
-- `--defer-k-image-minimization` - Minimize each K image when adding it to the sum, rather than also beforehand.
-- `--projected-preimages` - Track only required kernel coordinates in two-parameter preimages and intersections.
-- `--dense-kernel-pivots` - Use indexed pivot lookup in two-parameter iteration kernels.
-- `--throttle-progress` - Print progress when its integer percentage changes.
-- `--composition-generators` - Use certified postcomposition generators for I and precomposition generators for K.
-- `--amortize-reductions` - Accumulate up to 16 K images before reducing the sum, and skip images of K=0.
-- `--hom-classes` - Use actual Hom quotient classes without selecting composition generators.
-- `--phase-quotient` - Remove dependent map restrictions separately in each I/K pass.
-- `--reuse-target-reductions` - Reduce the fixed I-pass target generators once and reuse them in every preimage.
-- `--all-optimizations` - Enable all ten module optimizations.
+- `--no-projected-preimages` - Disable tracking only required kernel coordinates in two-parameter preimages.
+- `--no-composition-generators` - Disable both composition reductions (master switch).
+- `--no-sparse-nilpotent-generators` - Disable nilpotent actions and small sparse candidates.
+- `--no-complement-orbit-generators` - Disable orbit compression of sums of remaining maps.
+- `--no-amortize-reductions` - Reduce the K image sum after every image instead of batching up to 16 images.
+- `--hom-algorithm hom-exactness|optimised|full-restriction` - Select Algorithm B, A-1/2 (default), or A for both Hom computations.
+- `--full-end-space` - Use the full End_(2 epsilon) space without quotienting by shifted End_0.
+- `--no-adaptive-restriction` - Disable removing dependent map restrictions in each I/K pass.
+- `--no-reuse-target-reductions` - Disable reusing the reduced fixed I-pass target generators.
+- `--all-optimizations` - Enable all five optional optimizations and the Hom quotient (already the default), keeping the selected Hom algorithm.
 - `-h, --help` - Show usage and all options.
 
 Options may appear before or after the input. `--epsilon=0.05` also works.
 
-The ten optimization switches default to **off**. Omit a
-switch to retain its original behavior, or pass any combination to measure their
-interaction. They and `--profile` apply to module pruning and cannot be combined
-with `--old` or `--compare`. The legacy matrix algorithms are unchanged.
+All five optional optimizations default to **on**; use the `--no-...` flags to
+turn them off. The corresponding positive flags remain available. Fused I
+preimages, deferred K image minimization and percentage-based progress updates
+and indexed kernel pivot lookup are unconditional and have no switches.
+Hom defaults to **Algorithm A-1/2**; `--hom-algorithm=hom-exactness` selects B. Optimization flags and `--profile`
+apply to module pruning and cannot be combined with `--old` or `--compare`.
+The legacy matrix algorithms are unchanged.
 
 ```bash
-# Baseline, then the same module algorithm with one improvement enabled
+# Default optimized run, then disable projected preimages
 ./build/local-release/pruning input.scc -e 0.05 --no-output --profile
-./build/local-release/pruning input.scc -e 0.05 --no-output --profile --fuse-i-preimage
+./build/local-release/pruning input.scc -e 0.05 --no-output --profile --no-projected-preimages
 
 # Paper experiments: run without arguments
 python3 experiments/benchmark_runtime.py
@@ -128,23 +130,62 @@ python3 experiments/benchmark_optimizations.py
 Build `build/pruning` separately with CMake in Release mode with compact columns.
 Both scripts run that executable and sweep point counts and epsilon percentages on synthetic
 and observed real inputs. Runtime uses all optimizations; the optimization
-comparison uses an all-off baseline and each of the ten switches enabled alone.
-The comparison uses only 80, 160, 320 and 640 points; runtime keeps its wider
-20–2048-point sweep.
+comparison uses A-1/2 and the Hom quotient with the optional improvements
+explicitly disabled, then enables each improvement alone. Full End omits the
+quotient; the Quot percentage measures the baseline's speedup over that control.
+Dense pivots, fused I, deferred K minimization and throttled progress run in every configuration.
+Sparse immediately precedes Adaptive; Orbit has its own column; percentage tables omit the zero Base column.
+The optimization comparison uses Gaussian tori, clusters and immune inputs at
+80, 160 and 320 points, with epsilon 1% and 8%. Its compact portrait tables
+average the three synthetic seed medians and omit seed and homology columns.
+Runtime retains all families and the full 20-to-2560 size range. Data generation
+also retains every family and size.
 CSV and LaTeX tables are written automatically, and rerunning continues saved
 results. Change the few experiment settings at the top of each Python file.
 See [experiments/README.md](experiments/README.md) for data preparation and output paths.
+
+The standalone [`hom_reduction_benchmark.cpp`](hom_reduction_benchmark.cpp) reports
+set sizes and incremental times for `End(X)_(2 epsilon)`, its quotient by shifted
+`End(X)_0`, left/right composition generators of that quotient, and left/right
+generators of the full Hom space without that quotient. It accepts any bigraded
+SCC module presentation and a list of epsilon values. Values use the input's
+coordinate units by default; `--percent` interprets them as percentages of the
+largest bounding-box side over all generator and relation degrees:
+
+```bash
+cmake --build build/local-release --target hom_reduction_benchmark
+./build/local-release/hom_reduction_benchmark input.scc 0 0.005 0.01 0.02 --adaptive
+./build/local-release/hom_reduction_benchmark input.scc 1 2 4 8 --percent --adaptive
+```
+
+For percentage `p`, `epsilon = p/100 * max(xmax-xmin, ymax-ymin)` and the
+pruning shift is `(2*epsilon, 2*epsilon)`. A ready-to-run 640-point Gaussian-torus
+H1 sweep is `python3 experiments/benchmark_end_sizes.py`; it saves a CSV and logs
+under `experiments/results/End_sizes/`.
+
+`End(X)_0` is computed once and its time is included in each route total. Stage
+times exclude loading, sorting, printing and the copy needed to preserve the
+full Hom basis for comparison. Coordinate setup is shared and timed separately
+from Sparse-nilpotent, Complement-orbit, and Combined selection. These searches are certified; they need not be minimal. Optional `--adaptive` runs the pruning
+pair and reports candidate and retained map visits summed over the actual I/K
+passes, with selection times and repeated global-basis preparation time shown
+separately. Tables go to stdout and library progress goes to stderr. A small
+check with known dimensions can be run from the repository root:
+
+```bash
+cmake -DBENCHMARK="$PWD/build/local-release/hom_reduction_benchmark" -P tests/functional/hom_reduction_benchmark.cmake
+```
 
 The benchmark uses the module's internal total timer, excluding input preparation
 and file I/O. It captures progress output identically for every variant and
 shuffles run order with a fixed seed. Thus it includes progress formatting and
 log-file writes, but does not measure rendering in an interactive terminal. It
 reports timings, not output-equivalence checks. The `pruning_optimizations` CTest
-checks all 1024 combinations against the baseline: both submodules of the pruning
+checks all 128 combinations against the baseline: both submodules of the pruning
 pair, iteration counts, and exact isomorphism of the output, including grid and
 CSC boundaries. Its executable optionally accepts `FILE EPSILON` to check an
-additional input using 32 representative combinations (all eight new-switch
-combinations with four earlier settings). Kernel-related switches affect the I/K iteration operations;
+additional input using 64 representative combinations (all Hom/composition/adaptive/reuse
+combinations with four kernel/batching settings). Kernel-related switches affect the I/K iteration operations;
 the final presentation/minimization retain their existing paths. The composition
 switch separately changes construction of the map families.
 In other parameter dimensions, the kernel switches retain the existing kernel
@@ -153,9 +194,8 @@ implementation.
 The C++ API accepts the same options as its last argument:
 
 ```cpp
-stable_decomposition::PruningOptions options; // all false
-options.fuse_i_preimage = true;
-options.projected_preimages = true;
+stable_decomposition::PruningOptions options; // all on, Hom Algorithm A-1/2
+options.projected_preimages = false; // opt out of one optimization
 stable_decomposition::PruningProfile profile;
 auto result = stable_decomposition::pruning(input, epsilon, false, &profile, options);
 ```
@@ -187,72 +227,143 @@ explicitly presented as a separate algorithm in that paper.
 
 ### Composition generators and repeated reductions
 
-With `--composition-generators`, set `N=M(2*epsilon)`, `E=End(M)` and
-`H=Hom(M,N)`. The ordinary pruning path calls `End_2d_0`, which computes
-**generator lifts** modulo transported endomorphism lifts. Wrapping a lift in
-`Homomorphism` does not identify lifts that differ by target relations. The
-separate `module_hom_space_basis` API already computes actual module-map classes.
-The new path uses the existing Hom-exactness algorithm to construct actual H
-and E, then forms `Q=H/(eta E)`. Target-relation maps and inherited maps are
-reduced in one common coefficient space so that this quotient is well defined.
+Set `N=M(2*epsilon)`, `E=End(M)`, and `H=Hom(M,N)`. The ordinary
+`End_d_0` path now computes the actual quotient `Q=H/(eta E)`. It calls
+`reduce_matrix_family_modulo(inherited, additional, target_relations)` in
+Persistence-Algebra. This normalizes both families modulo the relations
+available at each source-generator grade, then performs the usual coefficient
+elimination. The two-argument version retains its original coefficient-only
+behaviour for ordinary matrix families.
 
-It computes the action tables `e(2*epsilon)*q` and `q*e` in Q coordinates.
-Candidate generators are basis vectors, their total sum and 64 fixed-seed sums.
-A greedy search selects candidates whose End orbits increase the span, stopping
-only at rank `dim Q`. Basis candidates guarantee termination. This certifies a
-generating set, but does not claim the smallest possible one. I uses the left
-action (postcomposition); K uses the right action (precomposition). No End maps
-are added to the iteration loops. The Hom-class quotient, composition
-generators, and pass-specific restriction quotient are explained with examples
-and proofs in [composition_generators_pruning.tex](composition_generators_pruning.tex)
-and [its PDF](composition_generators_pruning.pdf). The remaining seven
-implementation optimizations have their own explanations and proofs in
-[pruning_optimizations.tex](pruning_optimizations.tex) and
-[its PDF](pruning_optimizations.pdf).
+The note distinguishes the default quotient from two subsequent reductions.
+`--full-end-space` omits that quotient; it computes actual module maps, still
+identifying generator lifts that represent the same map. The optimization
+benchmark compares this full-space control with the quotient-based baseline.
+Its Quot percentage is `100*(full_space_time/baseline_time - 1)`:
+positive values mean that quotienting is faster.
 
-`--hom-classes` stops after constructing a vector-space basis of Q, so its
-effect can be measured separately from the End-action search. Composition
-selection always includes this class quotient; setting `--hom-classes` as well
-does not repeat it. All other switches can be combined independently.
+The reductions are:
 
-The profile reports the original lift-quotient dimension, actual End and Q
-dimensions, and both selected family sizes. Total time includes construction,
-action tables and generator selection. Upfront work can outweigh shorter loops;
-benchmark the complete algorithm on the intended inputs. The existing
-empty-original-family convention is preserved even when Q becomes zero.
+| Note section | CLI switch | Function |
+| --- | --- | --- |
+| Appendix A.1 Hom quotient (baseline) | Default; `--full-end-space` disables | `End_d_0` / `reduce_matrix_family_modulo` |
+| Composition: Sparse-nilpotent | On; disable with `--no-sparse-nilpotent-generators` | `budgeted_composition_generators` |
+| Composition: Complement-orbit | On; disable with `--no-complement-orbit-generators` | `budgeted_composition_generators` |
+| Appendix A.3 Adaptive restriction | On; disable with `--no-adaptive-restriction` | `pruning_adaptive_restriction` |
 
-`--amortize-reductions` changes K sums only: K stays fixed during a pass, image
-generators are appended, and the sum is minimized once per batch of 16 images
-and at the end. With `--defer-k-image-minimization`, individual images also skip
-minimization. Batching preserves the exact sum; it trades larger temporary
-generator matrices for fewer reductions. It is not a cache of kernel
+All `End_d_0` overloads take `hom_algorithm` after `info`, using the
+library enum `graded_linalg::HomAlgorithm`. The choices follow the library's
+function names and [the Hom paper](https://arxiv.org/abs/2604.10381):
+
+| CLI value / enum member | Paper | Library implementation |
+| --- | --- | --- |
+| `optimised` | A-1/2 | `hom_space_optimised`: restrict Q using local target cokernels |
+| `full-restriction` / `full_restriction` | A | `hom_space_full_restriction`: also restrict P using the target's graded kernel |
+| `hom-exactness` / `hom_exactness` | B | `hom_space_basis_new(..., true, ...)`: use exactness of Hom |
+
+For example, `End_d_0(eta_d, false, HomAlgorithm::hom_exactness)` selects B.
+All three return actual Hom bases and use the same final quotient reduction;
+none is claimed to be uniformly faster. Full restriction computes the next
+map of the target resolution needed to restrict P, not both entire resolutions.
+The input module is `X`, its shifted target is `X_d`, and `d` is the actual
+shift: `End_d_0` does not double it. Pruning supplies `d = 2*epsilon`.
+
+Composition selection uses `graded_linalg::budgeted_composition_generators`
+and a single prepared quotient-coordinate solver for both sides. It never
+constructs the complete pairwise action table.
+
+- **Sparse-nilpotent** samples strictly birth-degree-lowering actions and tries
+  small disjoint-support sums. Every certified nilpotent direction can remove an
+  original map without retaining the source map.
+- **Complement-orbit** tries up to 12 seeds by default, alternating broad sums
+  and random subsets of the remaining nonpivot maps. It stops after three
+  consecutive low-gain attempts and visits only structurally compatible actions. These
+  broader sums can save many more maps, but may cost more in later pruning.
+- With both enabled, the second method extends the first method's certificate
+  in the original Hom-quotient coordinates. Existing retained sparse candidates
+  remain retained; the combined output cannot be larger than the sparse output.
+
+`options.composition_budget.sparse_nilpotent` and
+`options.composition_budget.complement_orbit` independently enable the methods;
+the same structure exposes their separate work/density budgets. Both default
+on. `options.composition_generators=false` disables both. The Hom algorithm and
+full-End switches apply to either method, and profiles show both method flags.
+The exact complete-action routines remain available for small verification cases.
+
+Search controls are exposed on both the pruning CLI and Hom benchmark:
+`--composition-orbit-rounds N` (default 12), `--composition-orbit-seed-mode
+sum|random|hybrid` (default hybrid), `--composition-orbit-min-gain N` (default 1),
+`--composition-orbit-patience N` (default 3; 0 disables early stopping), and
+`--composition-orbit-random-seed N` (default 923407). The default visit allowance
+scales with the round limit; `--composition-orbit-pair-visits N` sets an explicit
+cap (0 means automatic). Sparse seed counts, nilpotent rounds, product/visit
+budgets, and density limits also have `--composition-*` options; see `--help`.
+`--all-optimizations` preserves explicitly chosen budgets. Profiles print them.
+
+The optimization experiment additionally compares 3, 6 and 12 hybrid rounds in
+`generators.csv` / `generators.tex`. For a wider sweep:
+
+```sh
+python3 experiments/benchmark_optimizations.py \
+  --composition-orbit-rounds 3 6 12 \
+  --composition-orbit-seed-mode sum random hybrid
+```
+
+Each sweep configuration enables both composition methods with other optional
+improvements off. Search settings and the binary hash are part of the resume key.
+
+The updated local note `explanations/budgeted_composition_generators.pdf` explains
+both methods, their shared certificate, complexity, switches, and benchmark
+columns. Its editable LaTeX source is alongside it. Earlier general notes and
+the manuscript insert remain in `explanations/`.
+
+Total time includes preparation and selection,
+which can outweigh the saved iteration work. An empty Q returns `(M, ker eta)`
+in both matrix and module pruning, including quick and profiled paths.
+
+Amortized reductions (on by default; `--no-amortize-reductions` disables them)
+change K sums only: K stays fixed during a pass, image generators are appended, and the sum is minimized once per batch of 16 images
+and at the end. Individual images always skip minimization; this is the
+unconditional deferred K image minimization. It removes one reduction per image,
+whereas batching reduces how often the entire accumulated sum is minimized.
+Batching preserves the exact sum; it trades larger temporary generator matrices
+for fewer reductions. It is not a cache of kernel
 factorizations across changing preimage problems.
 
-`--phase-quotient` computes a smaller family depending on the current pass.
+`--adaptive-restriction` computes a smaller family depending on the current pass.
 For I and J=eta(I), restrict the chosen maps to `Hom(I,N/J)` and retain a
 vector-space basis of their image. For K, do the same in `Hom(K,N/eta(K))`.
-It works with either the original lifts, actual Hom classes, or composition
-generators. Maps that vanish in these spaces impose no I constraint or add no
+It works with a Q basis from either Hom backend or with composition generators. Maps that vanish in these spaces impose no I constraint or add no
 new K image modulo eta(K). This computation uses the submodule at the start of
 the pass, never its changing intermediate state. Target relations are reduced
 with a separate cached scalar basis at each source-generator grade; a later
 target relation cannot kill an earlier map value. The profile reports numbers
 of candidate and retained restrictions and the time spent selecting them.
 
-`--reuse-target-reductions` forms C=[target relations, eta(I) generators] once
-per I pass and computes image generators of C without changing its ambient
-row basis. Every preimage then uses that smaller common target matrix. This
-shares target preparation, not the complete kernel factorization: each map
-still needs its own kernel traversal. The phase quotient also uses the prepared
-C when both switches are on. The kernel and projected-kernel switches apply to
-these preimages as usual. A proof in the implementation optimization note shows that replacing
-C by any matrix with the same graded image preserves every preimage.
+`--reuse-target-reductions` changes the witness columns in each I preimage.
+At the start of a pass, fix J=eta(I_start). If R is the target relation matrix,
+S lifts generators of J, and G_j lifts the current I, then without Reuse each
+map f_j computes the projected kernel of `[f_j G_j | S | R]`. The complete
+unreduced S and R blocks are supplied again for every map, even though J and
+the target module are fixed for the whole pass.
+
+With Reuse, the pass first computes a smaller graded image generating matrix
+C' for C=[R | S], preserving the free target's row basis. Each map then uses
+`[f_j G_j | C']`. For example, if C has 1000 witness columns and C' has 120,
+each preimage uses those 120 target columns. These counts are illustrative;
+Reuse pays for one extra target reduction per pass and helps only when the
+smaller witness block offsets that cost. It still runs a new kernel reduction
+for every changing f_j G_j; it does not cache a kernel factorization. C' is
+rebuilt at the next I pass because J may change. K is unaffected. Adaptive
+restriction also uses C' when both options are enabled. Projected preimages
+reduce auxiliary coordinate tracking, while Reuse reduces the input witness
+columns; the two improvements combine.
 
 These new reductions may save map operations while adding preprocessing cost.
 Benchmark them individually and in the intended combination; enabling every
 switch is not guaranteed to give the fastest run on every input.
-The consolidated note supersedes the earlier individual projection and
-composition notes and includes the latest measured examples.
+The consolidated note supersedes the earlier implementation and composition
+notes and includes proofs, examples, and empty-family cases.
 
 ### Examples
 

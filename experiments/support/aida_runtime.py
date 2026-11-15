@@ -7,7 +7,7 @@ from pathlib import Path
 import platform
 import tempfile
 
-from . import HERE, ROOT
+from . import DATA, HERE, ROOT
 from .runtime import digest, run_worker
 FIELDS = [
     "dataset", "family", "source", "n_points", "ambient_dimension", "homology", "scc",
@@ -25,9 +25,9 @@ FIELDS = [
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--manifest", type=Path, default=HERE / "manifest.csv")
+    parser.add_argument("--manifest", type=Path, default=DATA / "manifest.csv")
     parser.add_argument("--worker", type=Path, default=ROOT / "build/experiments/pruning_experiment")
-    parser.add_argument("--table", type=Path, default=HERE / "results.csv")
+    parser.add_argument("--table", type=Path, default=HERE / "results/aida/results.csv")
     parser.add_argument("--percentages", type=float, nargs="+", default=[1, 2, 4, 8, 16])
     parser.add_argument("--pruning-timeout", type=float, default=600)
     parser.add_argument("--aida-timeout", type=float, default=1200)

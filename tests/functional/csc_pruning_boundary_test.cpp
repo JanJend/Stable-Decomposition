@@ -43,7 +43,8 @@ int main() {
     parent.reset();
     assert(!lifetime.expired());
     assert(!pair.first.generator_map().generator_lift().get_col(0).empty());
-    assert(pair.second.num_of_gens() == 0);
+    // This shift kills the generator: empty Q gives K=ker(eta)=M.
+    assert(pair.second.equals(pair.first));
 
     const long double precise = 1.234567890123456789L;
     using Precise = GridGradedSparseMatrix<long double, 2, long>;

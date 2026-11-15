@@ -1,0 +1,55 @@
+% Generated automatically. Speedup percent = 100*(baseline_seconds/variant_seconds - 1).
+% Requires \usepackage{longtable,pdflscape}.
+% Medians across timing repeats on each input; seeds remain separate.
+% Timeout is the process deadline, not a completed pruning time.
+% Failed comparisons or nonpositive timings are n/a; unmeasured configurations are pending.
+% [partial] means either median uses only the completed repeats; see summary.csv.
+\begin{landscape}
+\begingroup\scriptsize\setlength{\tabcolsep}{1.5pt}
+\ifdim0.014000\linewidth<1em\fontsize{0.014000\linewidth}{0.018000\linewidth}\selectfont\fi
+\setlength{\LTcapwidth}{\linewidth}
+\begin{longtable}[c]{p{6em}p{1.5em}*{3}{p{2.5em}}*{10}{p{\dimexpr(\linewidth-15em-10\tabcolsep)/10-2\tabcolsep\relax}}}
+\caption{Optimization speedups across all point sets and epsilon values; compact columns. Epsilon is a percentage of degree extent. Speedup = 100*(Base/Variant - 1) percent. Negative values mean slower; the zero Base column is omitted.} \\
+\hline
+{\raggedleft Point set\par} & {\raggedleft $H$\par} & {\raggedleft $n$\par} & {\raggedleft Seed\par} & {\raggedleft $\epsilon$ (\%)\par} & {\raggedleft Fuse I\par} & {\raggedleft Defer K\par} & {\raggedleft Proj\par} & {\raggedleft Dense\par} & {\raggedleft Progress\par} & {\raggedleft Comp\par} & {\raggedleft Amort\par} & {\raggedleft Hom\par} & {\raggedleft Adaptive\par} & {\raggedleft Reuse\par} \\
+\hline\endhead
+\hline\endfoot
+{\raggedleft S3\par} & {\raggedleft 1\par} & {\raggedleft 80\par} & {\raggedleft 1\par} & {\raggedleft 1\par} & {\raggedleft +108.4\%\par} & {\raggedleft +8.2\%\par} & {\raggedleft +4.4\%\par} & {\raggedleft +21.6\%\par} & {\raggedleft +1.0\%\par} & {\raggedleft -89.0\%\par} & {\raggedleft +11.5\%\par} & {\raggedleft +13.8\%\par} & {\raggedleft +182.4\%\par} & {\raggedleft +3.4\%\par} \\
+{\raggedleft S3\par} & {\raggedleft 1\par} & {\raggedleft 80\par} & {\raggedleft 1\par} & {\raggedleft 2\par} & {\raggedleft +117.1\%\par} & {\raggedleft +9.5\%\par} & {\raggedleft +4.4\%\par} & {\raggedleft +22.4\%\par} & {\raggedleft +3.9\%\par} & {\raggedleft -87.4\%\par} & {\raggedleft +12.1\%\par} & {\raggedleft +23.0\%\par} & {\raggedleft +160.0\%\par} & {\raggedleft +4.5\%\par} \\
+{\raggedleft S3\par} & {\raggedleft 1\par} & {\raggedleft 80\par} & {\raggedleft 1\par} & {\raggedleft 5\par} & {\raggedleft +32.0\%\par} & {\raggedleft +1.0\%\par} & {\raggedleft +0.3\%\par} & {\raggedleft +7.1\%\par} & {\raggedleft +0.4\%\par} & {\raggedleft -40.2\%\par} & {\raggedleft +1.3\%\par} & {\raggedleft +115.1\%\par} & {\raggedleft +27.6\%\par} & {\raggedleft +0.7\%\par} \\
+{\raggedleft S3\par} & {\raggedleft 1\par} & {\raggedleft 80\par} & {\raggedleft 1\par} & {\raggedleft 10\par} & {\raggedleft +11.9\%\par} & {\raggedleft pending\par} & {\raggedleft +14.7\%\par} & {\raggedleft +12.5\%\par} & {\raggedleft +0.5\%\par} & {\raggedleft pending\par} & {\raggedleft pending\par} & {\raggedleft +850.3\%\par} & {\raggedleft pending\par} & {\raggedleft pending\par} \\
+{\raggedleft gauss\_clust\par} & {\raggedleft 0\par} & {\raggedleft 80\par} & {\raggedleft 1\par} & {\raggedleft 1\par} & {\raggedleft +59.6\%\par} & {\raggedleft +4.5\%\par} & {\raggedleft -3.1\%\par} & {\raggedleft +14.0\%\par} & {\raggedleft +1.2\%\par} & {\raggedleft -89.4\%\par} & {\raggedleft +7.2\%\par} & {\raggedleft +8.5\%\par} & {\raggedleft +274.4\%\par} & {\raggedleft +3.7\%\par} \\
+{\raggedleft gauss\_clust\par} & {\raggedleft 0\par} & {\raggedleft 80\par} & {\raggedleft 1\par} & {\raggedleft 2\par} & {\raggedleft +9.8\%\par} & {\raggedleft +4.1\%\par} & {\raggedleft -1.6\%\par} & {\raggedleft +4.4\%\par} & {\raggedleft +0.9\%\par} & {\raggedleft -80.9\%\par} & {\raggedleft +3.1\%\par} & {\raggedleft +68.2\%\par} & {\raggedleft +14.4\%\par} & {\raggedleft +2.8\%\par} \\
+{\raggedleft gauss\_clust\par} & {\raggedleft 0\par} & {\raggedleft 80\par} & {\raggedleft 1\par} & {\raggedleft 5\par} & {\raggedleft +2.1\%\par} & {\raggedleft -3.4\%\par} & {\raggedleft -3.8\%\par} & {\raggedleft +2.4\%\par} & {\raggedleft -1.1\%\par} & {\raggedleft -69.9\%\par} & {\raggedleft +0.3\%\par} & {\raggedleft +84.3\%\par} & {\raggedleft +1.2\%\par} & {\raggedleft -0.9\%\par} \\
+{\raggedleft gauss\_clust\par} & {\raggedleft 0\par} & {\raggedleft 80\par} & {\raggedleft 1\par} & {\raggedleft 10\par} & {\raggedleft +3.2\%\par} & {\raggedleft +0.5\%\par} & {\raggedleft -1.3\%\par} & {\raggedleft +1.8\%\par} & {\raggedleft -0.3\%\par} & {\raggedleft -49.2\%\par} & {\raggedleft +1.8\%\par} & {\raggedleft +94.0\%\par} & {\raggedleft +1.4\%\par} & {\raggedleft -1.0\%\par} \\
+{\raggedleft gauss\_clust\par} & {\raggedleft 0\par} & {\raggedleft 80\par} & {\raggedleft 2\par} & {\raggedleft 1\par} & {\raggedleft +43.1\%\par} & {\raggedleft +3.9\%\par} & {\raggedleft -5.9\%\par} & {\raggedleft +12.3\%\par} & {\raggedleft -1.9\%\par} & {\raggedleft -95.6\%\par} & {\raggedleft +6.1\%\par} & {\raggedleft +11.3\%\par} & {\raggedleft +197.9\%\par} & {\raggedleft +2.9\%\par} \\
+{\raggedleft gauss\_clust\par} & {\raggedleft 0\par} & {\raggedleft 80\par} & {\raggedleft 2\par} & {\raggedleft 2\par} & {\raggedleft +0.9\%\par} & {\raggedleft +2.6\%\par} & {\raggedleft -0.6\%\par} & {\raggedleft +5.2\%\par} & {\raggedleft +1.2\%\par} & {\raggedleft -41.8\%\par} & {\raggedleft -1.9\%\par} & {\raggedleft +105.1\%\par} & {\raggedleft +1.2\%\par} & {\raggedleft +1.8\%\par} \\
+{\raggedleft gauss\_clust\par} & {\raggedleft 0\par} & {\raggedleft 80\par} & {\raggedleft 2\par} & {\raggedleft 5\par} & {\raggedleft +6.4\%\par} & {\raggedleft +8.5\%\par} & {\raggedleft +7.5\%\par} & {\raggedleft +7.6\%\par} & {\raggedleft +6.3\%\par} & {\raggedleft -16.3\%\par} & {\raggedleft +7.2\%\par} & {\raggedleft +124.1\%\par} & {\raggedleft +4.3\%\par} & {\raggedleft +6.7\%\par} \\
+{\raggedleft gauss\_clust\par} & {\raggedleft 0\par} & {\raggedleft 80\par} & {\raggedleft 2\par} & {\raggedleft 10\par} & {\raggedleft -1.6\%\par} & {\raggedleft -3.2\%\par} & {\raggedleft +1.2\%\par} & {\raggedleft -1.0\%\par} & {\raggedleft -0.0\%\par} & {\raggedleft +144.4\%\par} & {\raggedleft -1.3\%\par} & {\raggedleft +157.6\%\par} & {\raggedleft +1.9\%\par} & {\raggedleft +2.6\%\par} \\
+{\raggedleft gauss\_clust\par} & {\raggedleft 0\par} & {\raggedleft 80\par} & {\raggedleft 3\par} & {\raggedleft 1\par} & {\raggedleft +74.3\%\par} & {\raggedleft +4.7\%\par} & {\raggedleft -1.4\%\par} & {\raggedleft +15.9\%\par} & {\raggedleft +0.7\%\par} & {\raggedleft -93.9\%\par} & {\raggedleft +6.3\%\par} & {\raggedleft +7.0\%\par} & {\raggedleft +420.4\%\par} & {\raggedleft +2.1\%\par} \\
+{\raggedleft gauss\_clust\par} & {\raggedleft 0\par} & {\raggedleft 80\par} & {\raggedleft 3\par} & {\raggedleft 2\par} & {\raggedleft +4.0\%\par} & {\raggedleft +1.7\%\par} & {\raggedleft -0.6\%\par} & {\raggedleft -4.4\%\par} & {\raggedleft +1.1\%\par} & {\raggedleft +22.1\%\par} & {\raggedleft -2.5\%\par} & {\raggedleft +113.5\%\par} & {\raggedleft -5.6\%\par} & {\raggedleft -1.1\%\par} \\
+{\raggedleft gauss\_clust\par} & {\raggedleft 0\par} & {\raggedleft 80\par} & {\raggedleft 3\par} & {\raggedleft 5\par} & {\raggedleft -7.3\%\par} & {\raggedleft +0.2\%\par} & {\raggedleft -3.8\%\par} & {\raggedleft +0.1\%\par} & {\raggedleft -2.2\%\par} & {\raggedleft +168.3\%\par} & {\raggedleft -3.7\%\par} & {\raggedleft +135.8\%\par} & {\raggedleft -1.4\%\par} & {\raggedleft -3.7\%\par} \\
+{\raggedleft gauss\_clust\par} & {\raggedleft 0\par} & {\raggedleft 80\par} & {\raggedleft 3\par} & {\raggedleft 10\par} & {\raggedleft +2.4\%\par} & {\raggedleft +0.0\%\par} & {\raggedleft +1.8\%\par} & {\raggedleft +0.5\%\par} & {\raggedleft -0.2\%\par} & {\raggedleft +22.0\%\par} & {\raggedleft +1.9\%\par} & {\raggedleft +123.7\%\par} & {\raggedleft -4.9\%\par} & {\raggedleft -2.2\%\par} \\
+{\raggedleft immuno\par} & {\raggedleft 1\par} & {\raggedleft 80\par} & {\raggedleft --\par} & {\raggedleft 1\par} & {\raggedleft +7.1\%\par} & {\raggedleft +3.4\%\par} & {\raggedleft +0.5\%\par} & {\raggedleft +4.2\%\par} & {\raggedleft +2.9\%\par} & {\raggedleft +144.3\%\par} & {\raggedleft +1.9\%\par} & {\raggedleft +119.3\%\par} & {\raggedleft +0.5\%\par} & {\raggedleft +2.3\%\par} \\
+{\raggedleft immuno\par} & {\raggedleft 1\par} & {\raggedleft 80\par} & {\raggedleft --\par} & {\raggedleft 2\par} & {\raggedleft +1.1\%\par} & {\raggedleft -2.1\%\par} & {\raggedleft -3.1\%\par} & {\raggedleft +1.8\%\par} & {\raggedleft -0.7\%\par} & {\raggedleft +148.8\%\par} & {\raggedleft +0.7\%\par} & {\raggedleft +150.1\%\par} & {\raggedleft -13.8\%\par} & {\raggedleft -1.5\%\par} \\
+{\raggedleft immuno\par} & {\raggedleft 1\par} & {\raggedleft 80\par} & {\raggedleft --\par} & {\raggedleft 5\par} & {\raggedleft +2.4\%\par} & {\raggedleft +3.4\%\par} & {\raggedleft +3.6\%\par} & {\raggedleft -9.4\%\par} & {\raggedleft +2.8\%\par} & {\raggedleft +214.0\%\par} & {\raggedleft +4.6\%\par} & {\raggedleft +214.1\%\par} & {\raggedleft +3.8\%\par} & {\raggedleft +2.8\%\par} \\
+{\raggedleft immuno\par} & {\raggedleft 1\par} & {\raggedleft 80\par} & {\raggedleft --\par} & {\raggedleft 10\par} & {\raggedleft +0.6\%\par} & {\raggedleft -0.6\%\par} & {\raggedleft -1.9\%\par} & {\raggedleft -1.7\%\par} & {\raggedleft -0.5\%\par} & {\raggedleft +213.5\%\par} & {\raggedleft +0.1\%\par} & {\raggedleft +206.9\%\par} & {\raggedleft -1.6\%\par} & {\raggedleft -0.9\%\par} \\
+\end{longtable}
+\endgroup
+\end{landscape}
+% Column key:
+% Base: baseline
+% Fuse I: fuse-i-preimage
+% Defer K: defer-k-image-minimization
+% Proj: projected-preimages
+% Dense: dense-kernel-pivots
+% Progress: throttle-progress
+% Comp: composition-generators
+% Amort: amortize-reductions
+% Hom: hom-classes
+% Adaptive: adaptive-restriction
+% Reuse: reuse-target-reductions
+% Base: all switches off. Other columns enable exactly one switch.
+% Fast configurations: requested repeats. Configurations above repeat-below: one observation.
+% See summary.csv for sample counts, min/max, failures and partial repetitions.
+% Composition uses the Hom-class quotient internally, even with the hom-classes switch off.

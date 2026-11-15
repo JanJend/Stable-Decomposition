@@ -2,11 +2,12 @@
 """Run the paper's size/epsilon experiment: python3 benchmark_runtime.py."""
 import argparse
 
+from support import RUNTIME_SIZES
 from support.paper_benchmarks import main
 
 # Experiment settings. No command-line arguments are needed.
-POINT_COUNTS = [20, 32, 64, 128, 256, 512, 1024, 2048]
-EPSILON_PERCENTAGES = [1, 2, 5, 10]
+POINT_COUNTS = RUNTIME_SIZES
+EPSILON_PERCENTAGES = [1, 2, 4, 8]
 REPEATS = 3
 TIMEOUT_SECONDS = 600
 MEMORY_MB = 12288

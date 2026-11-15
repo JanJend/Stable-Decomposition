@@ -29,7 +29,7 @@ TEST_CASE("legacy algebra adapters keep their public names") {
 TEST_CASE("empty additional lift family terminates quick pruning") {
     namespace sd = stable_decomposition;
     sd::Mat square(2, 1, {{0}, {0}}, {{0,1}, {1,0}}, {{0,0}});
-    CHECK(sd::End_2d_0(square, 0).empty());
+    CHECK(sd::End_d_0(square, 0).empty());
     auto pair = sd::pruning_pair(square, 0, true);
     CHECK(pair.first.data == graded_linalg::array<int>({{0}}));
     CHECK(pair.second.get_num_cols() == 0);

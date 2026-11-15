@@ -21,6 +21,7 @@
 #include <numeric>
 #include <optional>
 #include <stdexcept>
+#include <tuple>
 #include <type_traits>
 #include <grlina/matrices/matrix_algorithms.hpp>
 
@@ -83,7 +84,227 @@ auto convert_module_storage(const graded_linalg::Module<Matrix>& module) {
     return result;
 }
 
-/** Coordinate and grid matrices share this high-level module algorithm. */
+/** Return the canonical shift, the I map family, and the K map family.
+ * Without composition selection, the I family is used for both loops and
+ * the separate K family is left empty. Statistics are written only to profile.
+ */
+template <typename Matrix>
+std::tuple<graded_linalg::Homomorphism<Matrix>,
+           std::vector<graded_linalg::Homomorphism<Matrix>>,
+           std::vector<graded_linalg::Homomorphism<Matrix>>>
+prepare_pruning_pair(const graded_linalg::Module<Matrix>& X,
+                     double epsilon,
+                     PruningProfile* profile,
+                     const PruningOptions& options) {
+    (void)pruning_shift(epsilon); // shared finite/nonnegative validation
+    const typename Matrix::degree_type eps_vec =
+        diagonal_translation(X.presentation(), 2 * epsilon);
+    graded_linalg::Homomorphism<Matrix> eta_X =
+        graded_linalg::Homomorphism<Matrix>::canonical_shift(X, eps_vec);
+
+    std::pair<std::vector<graded_linalg::Homomorphism<Matrix>>,
+              std::vector<graded_linalg::Homomorphism<Matrix>>> families;
+    {
+        PruningTimer timer(profile ? &profile->basis : nullptr);
+        families = timed_with_progress(options.full_end_space ? "End_d" : "End_d/0", [&] {
+            if (options.composition_enabled())
+                return pruning_composition_generators(eta_X, eps_vec, options.hom_algorithm, profile, options.full_end_space, options.composition_budget);
+
+            std::vector<graded_linalg::Homomorphism<Matrix>> quotient_basis = options.full_end_space
+                ? graded_linalg::module_hom_space_basis(eta_X.domain(), eta_X.target(), options.hom_algorithm)
+                : graded_linalg::End_d_0(eta_X, true, options.hom_algorithm);
+            if (profile) {
+                profile->original_maps = quotient_basis.size();
+                profile->quotient_dimension = options.full_end_space ? 0 : quotient_basis.size();
+                profile->end_dimension = 0;
+                profile->i_maps = profile->k_maps = quotient_basis.size();
+            }
+            return std::make_pair(std::move(quotient_basis),
+                std::vector<graded_linalg::Homomorphism<Matrix>>{});
+        });
+    }
+
+    return {std::move(eta_X), std::move(families.first), std::move(families.second)};
+}
+
+/** Shrink I by repeated intersections until a full pass leaves it unchanged. */
+template <typename Matrix>
+std::pair<graded_linalg::Submodule<Matrix>, int>
+compute_pruning_i(const graded_linalg::Homomorphism<Matrix>& eta_X,
+                  const std::vector<graded_linalg::Homomorphism<Matrix>>& B_I,
+                  PruningProfile* profile,
+                  const PruningOptions& options) {
+    using Submodule = graded_linalg::Submodule<Matrix>;
+    using Hom = graded_linalg::Homomorphism<Matrix>;
+    Submodule I = eta_X.domain()->whole_submodule();
+    int iteration_I = 0;
+    PruningTimer phase(profile ? &profile->i_phase : nullptr);
+    for (;;) {
+        std::size_t counter = 0;
+        iteration_I++;
+        if (profile)
+            ++profile->i_iterations;
+        const Submodule I_ = I;
+        auto J = measure(profile, &PruningProfile::i_image, [&] {
+            return eta_X.image(I, true, true);
+        });
+        std::optional<Matrix> target_generators;
+        if ((options.adaptive_restriction || options.reuse_target_reductions) && !B_I.empty()) {
+            target_generators = measure(profile, &PruningProfile::i_target_prepare, [&] {
+                auto combined = eta_X.target()->presentation();
+                combined.append_matrix(J.generator_map().generator_lift());
+                if (options.reuse_target_reductions)
+                    return pruning_reduce_target(std::move(combined));
+                return combined;
+            });
+        }
+        std::vector<std::size_t> selected_I;
+        if (options.adaptive_restriction) {
+            selected_I = measure(profile, &PruningProfile::i_adaptive_restriction, [&] {
+                if (B_I.empty()) return std::vector<std::size_t>{};
+                // Use the pass-start I; J remains fixed through the pass.
+                return pruning_adaptive_restriction(B_I, I_.generator_map().generator_lift(), *target_generators);
+            });
+            if (profile) {
+                profile->i_restriction_candidates += B_I.size();
+                profile->i_restriction_kept += selected_I.size();
+            }
+        } else {
+            selected_I.resize(B_I.size());
+            std::iota(selected_I.begin(), selected_I.end(), std::size_t(0));
+        }
+        for (auto map_index : selected_I) {
+            const Hom& f = B_I[map_index];
+            ++counter;
+            // At most one update per percentage, with no clock reads.
+            if (counter == 1 ||
+                counter * 100 / selected_I.size() != (counter - 1) * 100 / selected_I.size())
+                print_progress(iteration_I, counter, selected_I.size());
+            // If i generates I, I intersect f^-1(J) = i((f*i)^-1(J)).
+            // Work on the free generator basis; no presentation of I is needed.
+            auto restricted = measure(profile, &PruningProfile::i_image, [&] {
+                return f.generator_lift() * I.generator_map().generator_lift();
+            });
+            auto inverse = measure(profile, &PruningProfile::i_preimage, [&] {
+                if (options.reuse_target_reductions)
+                    return pruning_preimage_with_target(restricted, *target_generators,
+                        options.projected_preimages);
+                return graded_linalg::inverse_image_generators(
+                    restricted, f.target()->presentation(),
+                    J.generator_map().generator_lift(), options.projected_preimages,
+                    true);
+            });
+            I = measure(profile, &PruningProfile::i_image, [&] {
+                return Submodule(I.parent(), I.generator_map().generator_lift() * inverse);
+            });
+            measure(profile, &PruningProfile::i_reduce, [&] {
+                I.minimize_generators(true, true);
+            });
+        }
+        std::cout << std::endl;
+        // I decreases, so only the reverse containment needs checking.
+        if (measure(profile, &PruningProfile::i_equal, [&] {
+                return I.contains(I_);
+            }))
+            break;
+    }
+    return {std::move(I), iteration_I};
+}
+
+/** Grow K by repeated sums and preimages until a full pass leaves it unchanged. */
+template <typename Matrix>
+std::pair<graded_linalg::Submodule<Matrix>, int>
+compute_pruning_k(const graded_linalg::Homomorphism<Matrix>& eta_X,
+                  const std::vector<graded_linalg::Homomorphism<Matrix>>& B_K,
+                  PruningProfile* profile,
+                  const PruningOptions& options) {
+    using Submodule = graded_linalg::Submodule<Matrix>;
+    using Hom = graded_linalg::Homomorphism<Matrix>;
+    Submodule K = eta_X.domain()->zero_submodule();
+    int iteration_K = 0;
+
+    PruningTimer phase(profile ? &profile->k_phase : nullptr);
+    for (;;) {
+        std::size_t counter = 0;
+        iteration_K++;
+        if (profile)
+            ++profile->k_iterations;
+        const Submodule K_ = K;
+        auto L = measure(profile, &PruningProfile::k_image, [&] {
+            return eta_X.image(K, true, true);
+        });
+        std::vector<std::size_t> selected_K;
+        if (options.adaptive_restriction) {
+            selected_K = measure(profile, &PruningProfile::k_adaptive_restriction, [&] {
+                auto target = eta_X.target()->presentation();
+                target.append_matrix(L.generator_map().generator_lift());
+                return pruning_adaptive_restriction(B_K, K.generator_map().generator_lift(), target);
+            });
+            if (profile) {
+                profile->k_restriction_candidates += B_K.size();
+                profile->k_restriction_kept += selected_K.size();
+            }
+        } else {
+            selected_K.resize(B_K.size());
+            std::iota(selected_K.begin(), selected_K.end(), std::size_t(0));
+        }
+        int pending = 0;
+        // K is fixed throughout this pass. Accumulate image generators
+        // and reduce once per bounded batch instead of after every sum.
+        auto accumulated = options.amortize_reductions
+            ? L.generator_map().generator_lift() : Matrix{};
+        auto flush = [&] {
+            L = Submodule(L.parent(), std::move(accumulated));
+            measure(profile, &PruningProfile::k_reduce, [&] {
+                L.minimize_generators(true, true);
+            });
+            accumulated = L.generator_map().generator_lift();
+            pending = 0;
+        };
+        for (auto map_index : selected_K) {
+            const Hom& f = B_K[map_index];
+            ++counter;
+            // At most one update per percentage, with no clock reads.
+            if (counter == 1 ||
+                counter * 100 / selected_K.size() != (counter - 1) * 100 / selected_K.size())
+                print_progress(iteration_K, counter, selected_K.size());
+            if (options.amortize_reductions && K.num_of_gens() == 0) continue;
+            auto image = measure(profile, &PruningProfile::k_image, [&] {
+                return f.image(K, false, true);
+            });
+            if (options.amortize_reductions) {
+                measure(profile, &PruningProfile::k_sum, [&] {
+                    accumulated.append_matrix(image.generator_map().generator_lift());
+                });
+                // ponytail: at most 16 images between reductions; this
+                // bounds batching without introducing a tuning API.
+                if (++pending == 16) flush();
+            } else {
+                L = measure(profile, &PruningProfile::k_sum, [&] {
+                    return L.sum(image, true);
+                });
+            }
+        }
+        if (options.amortize_reductions && pending) flush();
+        // This implementation takes the preimage under eta_X rather than eta_I.
+        // Consequently, K is represented as a submodule of X throughout the loop.
+        K = measure(profile, &PruningProfile::k_preimage, [&] {
+            return eta_X.preimage(L, true, options.projected_preimages,
+                                  true);
+        });
+        std::cout << std::endl;
+        // K increases: eta_X(K_) is included in L before taking its preimage.
+        if (measure(profile, &PruningProfile::k_equal, [&] {
+                return K_.contains(K);
+            }))
+            break;
+    }
+    return {std::move(K), iteration_K};
+}
+
+/** Coordinate and grid matrices share this high-level module algorithm.
+ * profile optionally collects timing and operation counts; nullptr disables it.
+ */
 template <typename Matrix>
 std::pair<graded_linalg::Submodule<Matrix>, graded_linalg::Submodule<Matrix>>
 pruning_pair(const graded_linalg::Module<Matrix>& X,
@@ -111,234 +332,27 @@ pruning_pair(const graded_linalg::Module<Matrix>& X,
                         K.generator_map().generator_lift()))};
     } else {
 
-        (void)pruning_shift(epsilon); // shared finite/nonnegative validation
         (void)quick; // the high-level algorithm retains the existing ordinary iteration
-        using Submodule = graded_linalg::Submodule<Matrix>;
-        using Hom = graded_linalg::Homomorphism<Matrix>;
-        auto progress = [&](int iteration, std::size_t current, std::size_t total) {
-            if (options.throttle_progress) {
-                // At most one update per percentage, with no clock reads.
-                if (total && (current == 1 ||
-                    current * 100 / total != (current - 1) * 100 / total))
-                    print_progress(iteration, current, total);
-            } else {
-                print_progress(iteration, current, total);
-            }
-        };
-        const auto eps_vec =
-            diagonal_translation(X.presentation(), 2 * epsilon);
-        Hom eta_X = graded_linalg::Homomorphism<Matrix>::canonical_shift(X, eps_vec);
+        auto [eta_X, B_I, composition_k_maps] = prepare_pruning_pair(X, epsilon, profile, options);
+        const std::vector<graded_linalg::Homomorphism<Matrix>>& B_K =
+            options.composition_enabled() ? composition_k_maps : B_I;
 
-        auto families = measure(profile, &PruningProfile::basis, [&] {
-            return timed_with_progress("End_2eps/0", [&] {
-                if (options.composition_generators || options.hom_classes) {
-                    return pruning_composition_generators(eta_X, eps_vec, options.composition_generators);
-                } else {
-                    PruningMapFamilies<Matrix> result;
-                    result.i_maps = graded_linalg::End_2d_0(eta_X, true);
-                    result.original_size = result.i_maps.size();
-                    return result;
-                }
-            });
-        });
-        const auto& B_I = families.i_maps;
-        const auto& B_K = options.composition_generators ? families.k_maps : families.i_maps;
-        if (profile) {
-            profile->original_maps = families.original_size;
-            profile->quotient_dimension = families.quotient_dimension;
-            profile->end_dimension = families.end_dimension;
-            profile->i_maps = B_I.size();
-            profile->k_maps = B_K.size();
+        // Q = 0 imposes no I constraints, but K must still contain ker(eta).
+        if (B_I.empty() && B_K.empty()) {
+            auto I = X.whole_submodule();
+            PruningTimer timer(profile ? &profile->k_preimage : nullptr);
+            auto K = eta_X.kernel();
+            return {std::move(I), std::move(K)};
         }
 
-        Submodule I = X.whole_submodule();
-        // Preserve the existing empty-family convention: return (X, 0).
-        // This differs from initializing K to the shift kernel in the paper.
-        if (!families.original_size)
-            return {I, X.zero_submodule()};
-
-        // Repeated intersections shrink I until a full pass leaves it unchanged.
-        int iteration_I = 0;
-        int counter = 0;
-        {
-            PruningTimer phase(profile ? &profile->i_phase : nullptr);
-            for (;;) {
-                counter = 0;
-                iteration_I++;
-                if (profile)
-                    ++profile->i_iterations;
-                const Submodule I_ = I;
-                auto J = measure(profile, &PruningProfile::i_image, [&] {
-                    return eta_X.image(I, true, options.dense_kernel_pivots);
-                });
-                std::optional<Matrix> target_generators;
-                if ((options.phase_quotient || options.reuse_target_reductions) && !B_I.empty()) {
-                    target_generators = measure(profile, &PruningProfile::i_target_prepare, [&] {
-                        auto combined = eta_X.target()->presentation();
-                        combined.append_matrix(J.generator_map().generator_lift());
-                        if (options.reuse_target_reductions)
-                            return pruning_reduce_target(std::move(combined), options.dense_kernel_pivots);
-                        return combined;
-                    });
-                }
-                std::vector<std::size_t> selected_I;
-                if (options.phase_quotient) {
-                    selected_I = measure(profile, &PruningProfile::i_phase_quotient, [&] {
-                        if (B_I.empty()) return std::vector<std::size_t>{};
-                        // Use the pass-start I; J remains fixed through the pass.
-                        return pruning_phase_map_basis(B_I, I_.generator_map().generator_lift(), *target_generators);
-                    });
-                    if (profile) {
-                        profile->i_phase_candidates += B_I.size();
-                        profile->i_phase_kept += selected_I.size();
-                    }
-                } else {
-                    selected_I.resize(B_I.size());
-                    std::iota(selected_I.begin(), selected_I.end(), std::size_t(0));
-                }
-                for (auto map_index : selected_I) {
-                    const Hom& f = B_I[map_index];
-                    progress(iteration_I, ++counter, selected_I.size());
-                    if (options.fuse_i_preimage) {
-                        // If i generates I, I intersect f^-1(J) = i((f*i)^-1(J)).
-                        // Work on the free generator basis; no presentation of I is needed.
-                        auto restricted = measure(profile, &PruningProfile::i_image, [&] {
-                            return f.generator_lift() * I.generator_map().generator_lift();
-                        });
-                        auto inverse = measure(profile, &PruningProfile::i_preimage, [&] {
-                            if (options.reuse_target_reductions)
-                                return pruning_preimage_with_target(restricted, *target_generators,
-                                    options.projected_preimages, options.dense_kernel_pivots);
-                            return graded_linalg::inverse_image_generators(
-                                restricted, f.target()->presentation(),
-                                J.generator_map().generator_lift(), options.projected_preimages,
-                                options.dense_kernel_pivots);
-                        });
-                        I = measure(profile, &PruningProfile::i_image, [&] {
-                            return Submodule(I.parent(), I.generator_map().generator_lift() * inverse);
-                        });
-                    } else {
-                        auto preimage = measure(profile, &PruningProfile::i_preimage, [&] {
-                            if (options.reuse_target_reductions) {
-                                Submodule result(f.domain(), pruning_preimage_with_target(
-                                    f.generator_lift(), *target_generators,
-                                    options.projected_preimages, options.dense_kernel_pivots));
-                                result.minimize_generators(true, options.dense_kernel_pivots);
-                                return result;
-                            }
-                            return f.preimage(J, true, options.projected_preimages,
-                                              options.dense_kernel_pivots);
-                        });
-                        I = measure(profile, &PruningProfile::i_intersection, [&] {
-                            return I.intersection(preimage, false, options.projected_preimages,
-                                                  options.dense_kernel_pivots);
-                        });
-                    }
-                    measure(profile, &PruningProfile::i_reduce, [&] {
-                        I.minimize_generators(true, options.dense_kernel_pivots);
-                    });
-                }
-                if (!options.throttle_progress)
-                    print_progress(iteration_I, counter, selected_I.size());
-                std::cout << std::endl;
-                // I decreases, so only the reverse containment needs checking.
-                if (measure(profile, &PruningProfile::i_equal, [&] {
-                        return I.contains(I_);
-                    }))
-                    break;
-            }
-        }
-
-        // Repeated sums and preimages grow K until a full pass leaves it unchanged.
-        Submodule K = X.zero_submodule();
-        int iteration_K = 0;
-
-        {
-            PruningTimer phase(profile ? &profile->k_phase : nullptr);
-            for (;;) {
-                counter = 0;
-                iteration_K++;
-                if (profile)
-                    ++profile->k_iterations;
-                const Submodule K_ = K;
-                auto L = measure(profile, &PruningProfile::k_image, [&] {
-                    return eta_X.image(K, true, options.dense_kernel_pivots);
-                });
-                std::vector<std::size_t> selected_K;
-                if (options.phase_quotient) {
-                    selected_K = measure(profile, &PruningProfile::k_phase_quotient, [&] {
-                        auto target = eta_X.target()->presentation();
-                        target.append_matrix(L.generator_map().generator_lift());
-                        return pruning_phase_map_basis(B_K, K.generator_map().generator_lift(), target);
-                    });
-                    if (profile) {
-                        profile->k_phase_candidates += B_K.size();
-                        profile->k_phase_kept += selected_K.size();
-                    }
-                } else {
-                    selected_K.resize(B_K.size());
-                    std::iota(selected_K.begin(), selected_K.end(), std::size_t(0));
-                }
-                int pending = 0;
-                // K is fixed throughout this pass. Accumulate image generators
-                // and reduce once per bounded batch instead of after every sum.
-                auto accumulated = options.amortize_reductions
-                    ? L.generator_map().generator_lift() : Matrix{};
-                auto flush = [&] {
-                    L = Submodule(L.parent(), std::move(accumulated));
-                    measure(profile, &PruningProfile::k_reduce, [&] {
-                        L.minimize_generators(true, options.dense_kernel_pivots);
-                    });
-                    accumulated = L.generator_map().generator_lift();
-                    pending = 0;
-                };
-                for (auto map_index : selected_K) {
-                    const Hom& f = B_K[map_index];
-                    progress(iteration_K, ++counter, selected_K.size());
-                    if (options.amortize_reductions && K.num_of_gens() == 0) continue;
-                    auto image = measure(profile, &PruningProfile::k_image, [&] {
-                        if (options.defer_k_image_minimization) {
-                            return f.image(K, false, options.dense_kernel_pivots);
-                        } else {
-                            return f.image(K, true, options.dense_kernel_pivots);
-                        }
-                    });
-                    if (options.amortize_reductions) {
-                        measure(profile, &PruningProfile::k_sum, [&] {
-                            accumulated.append_matrix(image.generator_map().generator_lift());
-                        });
-                        // ponytail: at most 16 images between reductions; this
-                        // bounds batching without introducing a tuning API.
-                        if (++pending == 16) flush();
-                    } else {
-                        L = measure(profile, &PruningProfile::k_sum, [&] {
-                            return L.sum(image, options.dense_kernel_pivots);
-                        });
-                    }
-                }
-                if (options.amortize_reductions && pending) flush();
-                // This implementation takes the preimage under eta_X rather than eta_I.
-                // Consequently, K is represented as a submodule of X throughout the loop.
-                K = measure(profile, &PruningProfile::k_preimage, [&] {
-                    return eta_X.preimage(L, true, options.projected_preimages,
-                                          options.dense_kernel_pivots);
-                });
-                if (!options.throttle_progress)
-                    print_progress(iteration_K, counter, selected_K.size());
-                std::cout << std::endl;
-                // K increases: eta_X(K_) is included in L before taking its preimage.
-                if (measure(profile, &PruningProfile::k_equal, [&] {
-                        return K_.contains(K);
-                    }))
-                    break;
-            }
-        }
+        auto [I, iteration_I] = compute_pruning_i(eta_X, B_I, profile, options);
+        auto [K, iteration_K] = compute_pruning_k(eta_X, B_K, profile, options);
 
         std::cout << iteration_I << " iterations for I, " << iteration_K << " iterations for K"
                   << std::endl;
         std::cout << "Output is " << std::max(iteration_I, iteration_K) * epsilon
                   << "-interleaved with the input" << std::endl;
-        return {I, K};
+        return {std::move(I), std::move(K)};
     }
 }
 

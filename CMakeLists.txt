@@ -107,6 +107,17 @@ target_link_libraries(pruning PRIVATE pruning_cli)
 add_executable(pruning_optimization_worker EXCLUDE_FROM_ALL experiments/support/optimization_runtime.cpp)
 target_link_libraries(pruning_optimization_worker PRIVATE stable_pruning)
 
+# Render input Hilbert functions without pruning or materializing the full induced grid.
+add_executable(experiment_hilbert EXCLUDE_FROM_ALL experiments/support/plot_input.cpp)
+if(APPLE)
+    target_compile_definitions(experiment_hilbert PRIVATE GRLINA_HILBERT_CORETEXT)
+    target_link_libraries(experiment_hilbert PRIVATE "-framework CoreText" "-framework CoreGraphics" "-framework CoreFoundation")
+endif()
+
+# Standalone Hom-reduction size/timing experiment (source kept at the repo root).
+add_executable(hom_reduction_benchmark EXCLUDE_FROM_ALL hom_reduction_benchmark.cpp)
+target_link_libraries(hom_reduction_benchmark PRIVATE stable_pruning)
+
 # Tests (optional)
 include(CTest)
 if(BUILD_TESTING)

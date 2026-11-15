@@ -33,7 +33,7 @@ TEST_CASE("epsilon controls the doubled iteration shift and final half shift") {
     auto additional = End_2epsilon_0(births, 0.5);
     REQUIRE(additional.size() == 1);
     CHECK(additional[0].data == graded_linalg::array<int>({{1}, {}}));
-    CHECK(End_2d_0(births, 0.5)[0].data == additional[0].data);
+    CHECK(End_d_0(births, 1.0)[0].data == additional[0].data);
     for (bool quick : {false, true}) {
         // Below the threshold: I is whole, K=0, and final translation is +epsilon.
         auto low = pruning(Module(births), 0.25, quick);
@@ -89,6 +89,66 @@ TEST_CASE("CLI stores epsilon with a historical delta spelling") {
     CHECK(parse({"pruning", "input.scc", "--old", "--quick"}).quick);
     CHECK_THROWS(parse({"pruning", "input.scc", "--old", "--compare"}));
     CHECK_THROWS(parse({"pruning", "input.scc", "--quick"}));
+    using graded_linalg::HomAlgorithm;
+    const auto defaults = parse({"pruning", "input.scc"}).pruning_options;
+    CHECK(defaults.hom_algorithm == HomAlgorithm::optimised);
+    CHECK(defaults.projected_preimages);
+    CHECK_FALSE(defaults.full_end_space);
+    CHECK(defaults.composition_generators);
+    CHECK(defaults.composition_budget.sparse_nilpotent);
+    CHECK(defaults.composition_budget.complement_orbit);
+    CHECK(defaults.composition_budget.orbit_rounds == 12);
+    CHECK(defaults.composition_budget.orbit_seed_mode == "hybrid");
+    const auto tuned = parse({"pruning", "input.scc", "--composition-orbit-rounds", "6",
+        "--composition-orbit-seed-mode=random", "--composition-orbit-min-gain", "10",
+        "--composition-orbit-patience", "2", "--composition-orbit-random-seed", "42",
+        "--composition-sparse-seeds", "32", "--composition-nilpotent-rounds", "16",
+        "--all-optimizations"}).pruning_options;
+    CHECK(tuned.composition_budget.orbit_rounds == 6);
+    CHECK(tuned.composition_budget.orbit_seed_mode == "random");
+    CHECK(tuned.composition_budget.orbit_min_gain == 10);
+    CHECK(tuned.composition_budget.orbit_patience == 2);
+    CHECK(tuned.composition_budget.orbit_random_seed == 42);
+    CHECK(tuned.composition_budget.max_seeds == 32);
+    CHECK(tuned.composition_budget.nilpotent_rounds == 16);
+    CHECK(tuned.composition_budget.sparse_nilpotent);
+    CHECK(tuned.composition_budget.complement_orbit);
+    for (const auto* value : {"-1", "1.5", "18446744073709551616", "abc"})
+        CHECK_THROWS(parse({"pruning", "input.scc", "--composition-orbit-rounds", value}));
+    CHECK_THROWS(parse({"pruning", "input.scc", "--composition-orbit-seed-mode=invalid"}));
+    const auto sparse_only = parse({"pruning", "input.scc", "--no-complement-orbit-generators"}).pruning_options;
+    CHECK(sparse_only.composition_budget.sparse_nilpotent);
+    CHECK_FALSE(sparse_only.composition_budget.complement_orbit);
+    const auto orbit_only = parse({"pruning", "input.scc", "--no-sparse-nilpotent-generators"}).pruning_options;
+    CHECK_FALSE(orbit_only.composition_budget.sparse_nilpotent);
+    CHECK(orbit_only.composition_budget.complement_orbit);
+    CHECK_FALSE(parse({"pruning", "input.scc", "--no-sparse-nilpotent-generators",
+                       "--no-complement-orbit-generators"}).pruning_options.composition_enabled());
+    CHECK(defaults.amortize_reductions);
+    CHECK(defaults.adaptive_restriction);
+    CHECK(defaults.reuse_target_reductions);
+    const auto disabled = parse({"pruning", "input.scc", "--no-projected-preimages",
+        "--no-composition-generators", "--no-amortize-reductions", "--no-adaptive-restriction", "--no-reuse-target-reductions"}).pruning_options;
+    CHECK_FALSE(disabled.projected_preimages);
+    CHECK_FALSE(disabled.full_end_space);
+    CHECK_FALSE(disabled.composition_generators);
+    CHECK_FALSE(disabled.amortize_reductions);
+    CHECK_FALSE(disabled.adaptive_restriction);
+    CHECK_FALSE(disabled.reuse_target_reductions);
+    CHECK(disabled.hom_algorithm == HomAlgorithm::optimised);
+    for (const auto* removed : {"--dense-kernel-pivots", "--no-dense-kernel-pivots", "--fuse-i-preimage", "--no-fuse-i-preimage", "--defer-k-image-minimization",
+                              "--no-defer-k-image-minimization", "--throttle-progress", "--no-throttle-progress"})
+        CHECK_THROWS(parse({"pruning", "input.scc", removed}));
+    for (auto algorithm : {HomAlgorithm::optimised, HomAlgorithm::full_restriction, HomAlgorithm::hom_exactness}) {
+        const std::string name = graded_linalg::hom_algorithm_name(algorithm);
+        CHECK(parse({"pruning", "input.scc", "--hom-algorithm", name}).pruning_options.hom_algorithm == algorithm);
+        CHECK(parse({"pruning", "input.scc", "--all-optimizations", "--hom-algorithm", name})
+                  .pruning_options.hom_algorithm == algorithm);
+    }
+    CHECK(parse({"pruning", "input.scc", "--full-end-space"}).pruning_options.full_end_space);
+    CHECK_FALSE(parse({"pruning", "input.scc", "--full-end-space", "--all-optimizations"}).pruning_options.full_end_space);
+    CHECK_THROWS(parse({"pruning", "input.scc", "--hom-algorithm", "unknown"}));
+    CHECK_THROWS(parse({"pruning", "input.scc", "--hom-algorithm"}));
 }
 
 TEST_CASE("pruning profiles count actual passes and operations without changing results") {
@@ -119,13 +179,16 @@ TEST_CASE("pruning profiles count actual passes and operations without changing 
             CHECK(p->k_iterations == k_passes);
             CHECK(p->i_equal.calls == i_passes);
             CHECK(p->k_equal.calls == k_passes);
-            // This fixture has exactly one additional map when epsilon=0.5.
-            CHECK(p->i_preimage.calls == i_passes);
-            CHECK(p->k_preimage.calls == k_passes);
+            // Q=0 computes ker(eta) directly, outside the iteration loops.
+            CHECK(p->k_preimage.calls == 1);
             CHECK(p->total.seconds >= p->i_phase.seconds + p->k_phase.seconds);
         }
+        // The single additional map is redundant in the second I pass;
+        // default adaptive restriction skips that preimage in module pruning.
+        CHECK(old_profile.i_preimage.calls == i_passes);
+        CHECK(new_profile.i_preimage.calls == (epsilon == 0 ? 0 : 1));
         CHECK(old_profile.i_intersection.calls == 0);
-        CHECK(new_profile.i_intersection.calls == i_passes);
+        CHECK(new_profile.i_intersection.calls == 0);
     }
 }
 

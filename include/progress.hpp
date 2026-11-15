@@ -12,16 +12,19 @@ struct PruningTiming {
     double seconds = 0;
 };
 
+// Optional output statistics, filled when the caller passes a pointer to this
+// object. Records durations, operation counts, iterations, and map-family sizes.
 struct PruningProfile {
     int i_iterations = 0, k_iterations = 0;
     std::size_t original_maps = 0, quotient_dimension = 0, end_dimension = 0;
     std::size_t i_maps = 0, k_maps = 0;
-    std::size_t i_phase_candidates = 0, i_phase_kept = 0, k_phase_candidates = 0, k_phase_kept = 0;
+    std::size_t i_restriction_candidates = 0, i_restriction_kept = 0;
+    std::size_t k_restriction_candidates = 0, k_restriction_kept = 0;
     PruningTiming total, basis, i_phase, k_phase;
     PruningTiming i_preimage, k_preimage, i_image, k_image;
     PruningTiming i_intersection, k_sum, i_reduce, k_reduce, i_equal, k_equal;
     PruningTiming quotient, presentation, minimize;
-    PruningTiming i_phase_quotient, k_phase_quotient, i_target_prepare;
+    PruningTiming i_adaptive_restriction, k_adaptive_restriction, i_target_prepare;
 };
 
 // A null destination leaves ordinary runs uninstrumented (no clock reads).
@@ -43,6 +46,8 @@ public:
     PruningTimer& operator=(const PruningTimer&) = delete;
 };
 
+// Run an operation and return its result; also record its time and call count
+// in the selected field when profile is provided.
 template <typename Function>
 decltype(auto) measure(PruningProfile* profile, PruningTiming PruningProfile::* field, Function&& operation) {
     PruningTimer timer(profile ? &(profile->*field) : nullptr);

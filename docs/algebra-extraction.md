@@ -26,7 +26,7 @@ was removed or updated.
 | --- | --- |
 | `matrix_reduction` | `reduce_matrix_family_modulo` in `mat_base.hpp` |
 | `homSpace` | `homomorphism_lift_basis`; `module_hom_space_basis` for Hom classes |
-| `End_2d_0` | `End_2d_0` |
+| `End_d_0` | `End_d_0` |
 | `zero_submodule`, `all_submodule` | matrix adapters; `Submodule::zero`, `Submodule::whole` |
 | `submodule_sum` | free-target matrix adapter; `Submodule::sum` for a presented parent |
 | `reduce_submodule` | adapter to `Submodule::minimize_generators` |
@@ -66,13 +66,13 @@ representatives. Pivot positions are pairs of indices, so rectangular matrices
 do not use the old mismatched flatten/unflatten convention. Reducers reference
 stable input storage; surviving B matrices are moved only after reduction.
 
-The shifted-lift complement retains the existing pruning convention: it takes
-a quotient of spaces of generator lifts, not Hom classes modulo target
-relations. Unshifted lifts are regraded into the shifted target before reduction.
-The primary helper is `End_2epsilon_0`; `End_2d_0` remains a compatibility name.
-Both now take epsilon and use `(2*epsilon, 2*epsilon)`. This corrects the old
-single-parameter shift. The extraction itself is not a proof of the pruning
-algorithm's mathematical correctness.
+The shifted-map quotient identifies generator lifts modulo target relations
+and transported endomorphisms. Unshifted maps are regraded into the shifted
+target before reduction. `End_d_0(X, d)` takes the actual shift d;
+the scalar Stable-Decomposition adapter uses `(d,d)`. The explicitly named
+`End_2epsilon_0(X, epsilon)` adapter uses `(2*epsilon,2*epsilon)`, as required
+by pruning. The selected Hom algorithm is `optimised` (A-1/2),
+`full_restriction` (A), or `hom_exactness` (B).
 
 Canonical shift maps subtract the shift from target generator degrees. They
 include identity lifts at every stored projective group, reject inadmissible

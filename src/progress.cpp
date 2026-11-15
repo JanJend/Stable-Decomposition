@@ -1,4 +1,5 @@
 #include "progress.hpp"
+#include "composition_options.hpp"
 #include <iomanip>
 
 namespace stable_decomposition {
@@ -8,26 +9,27 @@ void print_module_pruning_profile(std::ostream& out, const PruningProfile& profi
   const auto flags = out.flags();
   const auto precision = out.precision();
   out << "\nModule pruning options (0=off, 1=on):"
-      << " fuse_i_preimage=" << int(options.fuse_i_preimage)
-      << " defer_k_image_minimization=" << int(options.defer_k_image_minimization)
       << " projected_preimages=" << int(options.projected_preimages)
-      << " dense_kernel_pivots=" << int(options.dense_kernel_pivots)
-      << " throttle_progress=" << int(options.throttle_progress)
+      << " full_end_space=" << int(options.full_end_space)
       << " composition_generators=" << int(options.composition_generators)
+      << " sparse_nilpotent_generators=" << int(options.composition_generators && options.composition_budget.sparse_nilpotent)
+      << " complement_orbit_generators=" << int(options.composition_generators && options.composition_budget.complement_orbit)
       << " amortize_reductions=" << int(options.amortize_reductions)
-      << " hom_classes=" << int(options.hom_classes)
-      << " phase_quotient=" << int(options.phase_quotient)
+      << " hom_algorithm=" << graded_linalg::hom_algorithm_name(options.hom_algorithm)
+      << " adaptive_restriction=" << int(options.adaptive_restriction)
       << " reuse_target_reductions=" << int(options.reuse_target_reductions) << '\n'
       << "I iterations: " << profile.i_iterations << "; K iterations: " << profile.k_iterations << '\n'
-      << "Original lift quotient: " << profile.original_maps
+      << (options.full_end_space ? "Initial full Hom basis: " : "Initial Hom quotient: ") << profile.original_maps
       << "; I maps: " << profile.i_maps << "; K maps: " << profile.k_maps << '\n';
-  if (options.composition_generators || options.hom_classes)
+  print_composition_options(out, options.composition_budget);
+  if (options.composition_enabled())
     out << "Actual End dimension: " << profile.end_dimension
-        << "; Hom/eta End dimension: " << profile.quotient_dimension << '\n';
-  if (options.phase_quotient)
-    out << "Phase map restrictions retained (all passes): I " << profile.i_phase_kept
-        << '/' << profile.i_phase_candidates << "; K " << profile.k_phase_kept
-        << '/' << profile.k_phase_candidates << '\n';
+        << (options.full_end_space ? "; full Hom dimension: " : "; Hom/eta End dimension: ")
+        << profile.original_maps << '\n';
+  if (options.adaptive_restriction)
+    out << "Adaptive restrictions retained (all passes): I " << profile.i_restriction_kept
+        << '/' << profile.i_restriction_candidates << "; K " << profile.k_restriction_kept
+        << '/' << profile.k_restriction_candidates << '\n';
   out
       << std::fixed << std::setprecision(6) << std::left << std::setw(26) << "Operation"
       << std::right << std::setw(10) << "Calls" << std::setw(14) << "Seconds" << '\n';
@@ -36,10 +38,10 @@ void print_module_pruning_profile(std::ostream& out, const PruningProfile& profi
         << std::setw(10) << timing.calls << std::setw(14) << timing.seconds << '\n';
   };
   row("Total", profile.total);
-  row("End_2eps/0", profile.basis);
+  row(options.full_end_space ? "End_d" : "End_d/0", profile.basis);
   row("I phase", profile.i_phase); row("K phase", profile.k_phase);
   row("I target preparation", profile.i_target_prepare);
-  row("I phase quotient", profile.i_phase_quotient); row("K phase quotient", profile.k_phase_quotient);
+  row("I adaptive restriction", profile.i_adaptive_restriction); row("K adaptive restriction", profile.k_adaptive_restriction);
   row("I preimage", profile.i_preimage); row("I intersection", profile.i_intersection);
   row("I image / composition", profile.i_image); row("I generator reduction", profile.i_reduce);
   row("I convergence check", profile.i_equal); row("K preimage", profile.k_preimage);
@@ -75,7 +77,7 @@ void print_pruning_comparison(std::ostream& out, const PruningProfile& matrix, c
                       {static_cast<std::size_t>(module.i_iterations), module.i_phase.seconds});
   row("K iterations", {static_cast<std::size_t>(matrix.k_iterations), matrix.k_phase.seconds},
                       {static_cast<std::size_t>(module.k_iterations), module.k_phase.seconds});
-  row("End_2eps/0", matrix.basis, module.basis);
+  row("End_d/0", matrix.basis, module.basis);
   row("I preimage", matrix.i_preimage, module.i_preimage);
   row("I intersection", matrix.i_intersection, module.i_intersection);
   row("I image / composition", matrix.i_image, module.i_image);

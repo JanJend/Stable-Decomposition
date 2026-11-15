@@ -1,5 +1,6 @@
 #include "utils.hpp"
 #include "types.hpp"
+#include "composition_options.hpp"
 #include <CLI11.hpp>
 #include <cmath>
 #include <iostream>
@@ -24,28 +25,37 @@ ProgramOptions parse_arguments(int argc, char** argv) {
     app.add_flag("--quick", opts.quick, "Use the original matrix algorithm's quick mode (requires --old)")->needs(old);
     app.add_flag("--profile", opts.profile, "Print module pruning operation timings")
         ->excludes(old)->excludes(compare);
-    app.add_flag("--fuse-i-preimage", opts.pruning_options.fuse_i_preimage,
-                 "Module: combine the I preimage and intersection")->excludes(old)->excludes(compare);
-    app.add_flag("--defer-k-image-minimization", opts.pruning_options.defer_k_image_minimization,
-                 "Module: minimize K images only when summing")->excludes(old)->excludes(compare);
-    app.add_flag("--projected-preimages", opts.pruning_options.projected_preimages,
-                 "Module: track only needed kernel coordinates in two-parameter preimages")->excludes(old)->excludes(compare);
-    app.add_flag("--dense-kernel-pivots", opts.pruning_options.dense_kernel_pivots,
-                 "Module: use indexed pivot lookup in two-parameter iteration kernels")->excludes(old)->excludes(compare);
-    app.add_flag("--throttle-progress", opts.pruning_options.throttle_progress,
-                 "Module: update progress only when its percentage changes")->excludes(old)->excludes(compare);
-    app.add_flag("--composition-generators", opts.pruning_options.composition_generators,
-                 "Module: use certified post/precomposition generators of the Hom quotient")->excludes(old)->excludes(compare);
-    app.add_flag("--amortize-reductions", opts.pruning_options.amortize_reductions,
-                 "Module: batch K image sums before reducing generators")->excludes(old)->excludes(compare);
-    app.add_flag("--hom-classes", opts.pruning_options.hom_classes,
-                 "Module: construct actual Hom quotient classes without composition selection")->excludes(old)->excludes(compare);
-    app.add_flag("--phase-quotient", opts.pruning_options.phase_quotient,
-                 "Module: remove dependent map restrictions separately in each I/K pass")->excludes(old)->excludes(compare);
-    app.add_flag("--reuse-target-reductions", opts.pruning_options.reuse_target_reductions,
-                 "Module: reduce the fixed I-pass target generators once for all preimages")->excludes(old)->excludes(compare);
+    app.add_flag("--projected-preimages,!--no-projected-preimages", opts.pruning_options.projected_preimages,
+                 "Module: track only needed kernel coordinates (default: on)")->excludes(old)->excludes(compare);
+    app.add_flag("--composition-generators,!--no-composition-generators", opts.pruning_options.composition_generators,
+                 "Module: use certified composition generators of the Hom quotient (default: on)")->excludes(old)->excludes(compare);
+    app.add_flag("--sparse-nilpotent-generators,!--no-sparse-nilpotent-generators",
+                 opts.pruning_options.composition_budget.sparse_nilpotent,
+                 "Module: nilpotent actions and small sparse seeds (default: on)")->excludes(old)->excludes(compare);
+    app.add_flag("--complement-orbit-generators,!--no-complement-orbit-generators",
+                 opts.pruning_options.composition_budget.complement_orbit,
+                 "Module: orbit compression of sums of remaining basis maps (default: on)")->excludes(old)->excludes(compare);
+    for (const auto& option : stable_decomposition::composition_count_options)
+        app.add_option("--" + std::string(option.name), opts.pruning_options.composition_budget.*(option.member), option.help)
+            ->check(CLI::NonNegativeNumber)->excludes(old)->excludes(compare);
+    app.add_option("--composition-orbit-seed-mode", opts.pruning_options.composition_budget.orbit_seed_mode,
+                   "Orbit candidates: sum, random, hybrid (alternating broad/random; default)")
+        ->check(CLI::IsMember({"sum", "random", "hybrid"}))->excludes(old)->excludes(compare);
+    app.add_flag("--amortize-reductions,!--no-amortize-reductions", opts.pruning_options.amortize_reductions,
+                 "Module: batch K image sums before reducing generators (default: on)")->excludes(old)->excludes(compare);
+    app.add_flag("--full-end-space", opts.pruning_options.full_end_space,
+                 "Module: use End_(2 epsilon) without quotienting by shifted End_0 (default: off)")->excludes(old)->excludes(compare);
+    std::string hom_algorithm = "optimised";
+    app.add_option("--hom-algorithm", hom_algorithm,
+                   "Module Hom algorithm: optimised (A-1/2, default), hom-exactness (B), full-restriction (A)")
+        ->check(CLI::IsMember({"optimised", "full-restriction", "hom-exactness"}))
+        ->excludes(old)->excludes(compare);
+    app.add_flag("--adaptive-restriction,!--no-adaptive-restriction", opts.pruning_options.adaptive_restriction,
+                 "Module: remove dependent restrictions in each I/K pass (default: on)")->excludes(old)->excludes(compare);
+    app.add_flag("--reuse-target-reductions,!--no-reuse-target-reductions", opts.pruning_options.reuse_target_reductions,
+                 "Module: reduce the fixed I-pass target generators once (default: on)")->excludes(old)->excludes(compare);
     bool all_optimizations = false;
-    app.add_flag("--all-optimizations", all_optimizations, "Module: enable all ten optimization switches")
+    app.add_flag("--all-optimizations", all_optimizations, "Module: enable all optional optimizations and the Hom quotient (already the default); keep the selected Hom algorithm and search budgets")
         ->excludes(old)->excludes(compare);
     app.add_option("--image-size", opts.image_size, "Hilbert heatmap size in pixels (default: 500)")
         ->check(CLI::Range(128, 2048));
@@ -67,7 +77,16 @@ ProgramOptions parse_arguments(int argc, char** argv) {
     }
     if (opts.epsilon && (!std::isfinite(*opts.epsilon) || *opts.epsilon < 0 || !std::isfinite(2 * *opts.epsilon)))
         throw std::invalid_argument("epsilon and 2*epsilon must be finite and nonnegative");
-    if (all_optimizations) opts.pruning_options = {true, true, true, true, true, true, true, true, true, true};
+    using graded_linalg::HomAlgorithm;
+    opts.pruning_options.hom_algorithm = hom_algorithm == "full-restriction" ? HomAlgorithm::full_restriction
+        : hom_algorithm == "hom-exactness" ? HomAlgorithm::hom_exactness : HomAlgorithm::optimised;
+    if (all_optimizations) {
+        auto& options = opts.pruning_options;
+        options.projected_preimages = options.composition_generators = options.amortize_reductions = true;
+        options.adaptive_restriction = options.reuse_target_reductions = true;
+        options.composition_budget.sparse_nilpotent = options.composition_budget.complement_orbit = true;
+        options.full_end_space = false;
+    }
     return opts;
 }
 

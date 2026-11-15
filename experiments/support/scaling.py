@@ -7,9 +7,11 @@ import subprocess
 import tempfile
 import time
 
-SWITCHES = ["fuse-i-preimage", "defer-k-image-minimization", "projected-preimages",
-            "dense-kernel-pivots", "throttle-progress", "composition-generators",
-            "amortize-reductions", "hom-classes", "phase-quotient", "reuse-target-reductions"]
+# One-at-a-time comparisons against a quotient-based baseline. Full End is the
+# unoptimized control for measuring the quotient's speedup (reverse ratio).
+SWITCHES = ["projected-preimages", "amortize-reductions",
+            "full-end-space", "sparse-nilpotent-generators", "adaptive-restriction",
+            "reuse-target-reductions", "complement-orbit-generators"]
 
 
 def presentation_info(path):

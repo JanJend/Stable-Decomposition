@@ -14,11 +14,11 @@ vec<Mat> homSpace(Mat& A, Mat& B) {
     return graded_linalg::homomorphism_lift_basis(A, B);
 }
 vec<Mat> End_2epsilon_0(Mat& M, double epsilon) {
-    return timed_with_progress("End_2eps/0", [&] {
-        return graded_linalg::End_2d_0(M, pruning_shift(epsilon), true);
+    return timed_with_progress("End_d/0", [&] {
+        return graded_linalg::End_d_0(M, pruning_shift(epsilon), true);
     });
 }
-vec<Mat> End_2d_0(Mat& M, double epsilon) { return End_2epsilon_0(M, epsilon); }
+vec<Mat> End_d_0(Mat& X, double d) { return graded_linalg::End_d_0(X, {d, d}, true); }
 Mat zero_submodule(const Mat& M) { return graded_linalg::zero_submodule(M); }
 Mat all_submodule(const Mat& M) { return graded_linalg::all_submodule(M); }
 Mat submodule_sum(Mat A, Mat B) { return graded_linalg::submodule_sum(A, B); }

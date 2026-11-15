@@ -50,10 +50,17 @@ int main(int argc, char** argv) {
         const double epsilon = std::stod(epsilon_text, &used);
         if (used != epsilon_text.size()) throw std::invalid_argument("Invalid epsilon");
         const auto mask = std::stoul(mask_text, &used);
-        if (used != mask_text.size() || mask > 1023) throw std::invalid_argument("Invalid optimization mask");
-        stable_decomposition::PruningOptions options{
-            bool(mask & 1), bool(mask & 2), bool(mask & 4), bool(mask & 8), bool(mask & 16),
-            bool(mask & 32), bool(mask & 64), bool(mask & 128), bool(mask & 256), bool(mask & 512)};
+        if (used != mask_text.size() || mask > 127) throw std::invalid_argument("Invalid optimization mask");
+        // Bits follow scaling.SWITCHES; mask 0 is the experiment baseline.
+        stable_decomposition::PruningOptions options;
+        options.projected_preimages = mask & 1;
+        options.amortize_reductions = mask & 2;
+        options.full_end_space = mask & 4;
+        options.composition_generators = (mask & 8) || (mask & 64);
+        options.composition_budget.sparse_nilpotent = mask & 8;
+        options.composition_budget.complement_orbit = mask & 64;
+        options.adaptive_restriction = mask & 16;
+        options.reuse_target_reductions = mask & 32;
         stable_decomposition::Module input(argv[1]);
         input.sort_compatibly();
         BenchmarkMemoryGuard memory(argc == 5 ? std::stod(argv[4]) : 0);

@@ -5,7 +5,7 @@ import statistics
 from .scaling import SWITCHES
 
 VARIANTS = ["baseline", *SWITCHES]
-LABELS = ["Base", "Proj", "Amort", "Full End", "Sparse", "Adaptive", "Reuse", "Orbit"]
+LABELS = ["Base", "Proj", "Amort", "Full End", "Nilpotent", "Adaptive", "Reuse", "Orbit", "Direct Q", "Fast I"]
 SPEEDUP_NAMES = ["hom-quotient" if name == "full-end-space" else name for name in SWITCHES]
 ROW_END = " " + chr(92) * 2
 
@@ -90,8 +90,13 @@ def average_seeds(summaries, seed_counts):
             mean.update(completed=sum(row["completed"] for row in rows),
                         attempts=sum(row["attempts"] for row in rows),
                         status="partial" if any(row["status"] == "partial" for row in rows) else "ok")
-            for field in ("pruning_seconds", "process_seconds", "generators", "relations", "epsilon", "initial_maps", "i_maps", "k_maps"):
+            for field in ("pruning_seconds", "process_seconds", "generators", "relations", "initial_maps", "i_maps", "k_maps"):
                 mean[field] = statistics.mean(row[field] for row in rows) if all(row[field] != "" for row in rows) else ""
+        values = [row["epsilon"] for row in rows]
+        if all(isinstance(value, (list, tuple)) for value in values):
+            mean["epsilon"] = tuple(statistics.mean(value[a] for value in values) for a in range(2))
+        elif all(value != "" for value in values):
+            mean["epsilon"] = statistics.mean(values)
         result.append(mean)
     return result
 
@@ -180,15 +185,18 @@ def write_latex(path, matrix, kind, percentages=False):
         caption = ("Optimization speedups (percent) from the mean runtimes. "
                    "Quot = 100*(Full End/Base - 1); other columns = 100*(Base/Variant - 1)."
                    if percentages else "Optimization runtimes (seconds).")
-        caption += (" Synthetic entries average the three seed medians; immune entries use one observed input. "
-                    "Epsilon is a percentage of degree extent. -- means pending; n/a means unavailable; "
+        caption += (" Direct Q uses the single-solve shift quotient; Base uses separate End0 and shifted-Hom solves. "
+                    "End0 is still computed separately when needed for module actions. "
+                    "Fast I refreshes the shift image of I before each map; Base fixes it per pass. "
+                    "Synthetic entries average the three seed medians; immune entries use one observed input. "
+                    "Epsilon scales each bounding-box side by its percentage. -- means pending; n/a means unavailable; "
                     "* marks partial timing repeats. See summary.csv for failures.")
         headings = ["Point set", "$n$", r"$\epsilon$ (\%)", *labels]
         columns = "@{}lrr" + "r" * len(names) + "@{}"
         lines += ["% Standard table/tabular; no page rotation, resizing or geometry changes.",
                   "% Equal-weight mean of per-seed timing medians. A failed or missing seed is not silently omitted.",
                   r"\begin{table}[tbp]", r"\centering", r"\begingroup\scriptsize",
-                  r"\setlength{\tabcolsep}{2pt}", r"\renewcommand{\arraystretch}{1.05}",
+                  r"\setlength{\tabcolsep}{0.3pt}", r"\renewcommand{\arraystretch}{1.05}",
                   r"\caption{" + latex(caption) + "}", r"\begin{tabular}{" + columns + "}", r"\hline",
                   " & ".join(headings) + ROW_END, r"\hline"]
         suffix = "_speedup_percent" if percentages else "_seconds"
@@ -208,7 +216,7 @@ def write_latex(path, matrix, kind, percentages=False):
             by_family.setdefault((entry["family"], entry["homology"], entry["epsilon_percent"], entry["column_storage"]), []).append(entry)
         for (family, homology, percentage, storage), entries in by_family.items():
             headings = ["$n$", "Seed", r"$\epsilon$", "Gens", "Rels", "Pruning (s)", "Process (s)", "Runs"]
-            caption = f"{family}, H{homology}, {storage} columns. Epsilon: {percentage:g}% of degree extent. All optimizations enabled."
+            caption = f"{family}, H{homology}, {storage} columns. Epsilon: {percentage:g}% of each bounding-box side. All optimizations enabled."
             column = r"p{\dimexpr(\linewidth-5em-4\tabcolsep)/6-2\tabcolsep\relax}"
             columns = r"*{2}{p{2.5em}}*{6}{" + column + "}"
             lines += [r"\begingroup\scriptsize\setlength{\tabcolsep}{1.5pt}",
@@ -218,7 +226,9 @@ def write_latex(path, matrix, kind, percentages=False):
                       r"\hline\endhead"]
             for entry in entries:
                 values = [entry["n_points"], entry["seed"] if entry["seed"] != "" else "--",
-                          f"{entry['epsilon']:.6g}" if entry["epsilon"] != "" else "--",
+                          ("(" + ",".join(f"{v:.6g}" for v in entry["epsilon"]) + ")"
+                           if isinstance(entry["epsilon"], (list, tuple)) else
+                           f"{entry['epsilon']:.6g}" if entry["epsilon"] != "" else "--"),
                           entry["generators"], entry["relations"], entry["pruning_seconds"],
                           entry["process_seconds"], f"{entry['completed']}/{entry['attempts']}"]
                 lines.append(" & ".join(r"{\raggedleft " + latex(value) + r"\par}" for value in values) + ROW_END)
@@ -232,7 +242,7 @@ def write_latex(path, matrix, kind, percentages=False):
 def write_generator_latex(path, rows):
     """Tall comparison table; extra budgets add rows rather than widening the main table."""
     lines = [r"% Requires \usepackage{longtable}.",
-             "% Generator configurations enable Sparse-nilpotent and Complement-orbit only; other optional switches are off.",
+             "% Generator configurations enable Nilpotent reduction and Complement-orbit only; other optional switches are off.",
              "% Mean of per-seed medians. Full settings and failures are in generators.csv and observations.jsonl.",
              r"\begingroup\scriptsize\setlength{\tabcolsep}{3pt}",
              r"\begin{longtable}{@{}lrrlrrrrr@{}}",

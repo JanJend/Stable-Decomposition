@@ -10,11 +10,12 @@ import time
 # One-at-a-time comparisons against a quotient-based baseline. Full End is the
 # unoptimized control for measuring the quotient's speedup (reverse ratio).
 SWITCHES = ["projected-preimages", "amortize-reductions",
-            "full-end-space", "sparse-nilpotent-generators", "adaptive-restriction",
-            "reuse-target-reductions", "complement-orbit-generators"]
+            "full-end-space", "nilpotent-reduction", "adaptive-restriction",
+            "reuse-target-reductions", "complement-orbit-generators", "single-solve-quotient",
+            "update-i-target"]
 
 
-def presentation_info(path):
+def presentation_info(path, *, per_axis=False):
     lines = path.read_text().splitlines()
     if lines[:2] != ["scc2020", "2"]:
         raise ValueError(f"Expected a two-parameter SCC presentation: {path}")
@@ -23,9 +24,10 @@ def presentation_info(path):
                for line in lines[3:] if line.strip()]
     if len(degrees) != sum(sizes[:-1]) or any(len(degree) != 2 for degree in degrees):
         raise ValueError(f"Unexpected SCC degree table: {path}")
-    extent = max((max(degree[a] for degree in degrees) - min(degree[a] for degree in degrees)
-                  for a in range(2)), default=0) if degrees else 0
-    return sizes[1], sizes[0], extent
+    sides = tuple(max(degree[a] for degree in degrees) - min(degree[a] for degree in degrees)
+                  if degrees else 0 for a in range(2))
+    return sizes[1], sizes[0], sides if per_axis else max(sides)
+
 
 
 def run(worker, path, epsilon, mask, timeout, memory_mb, monitor_memory, label=None):

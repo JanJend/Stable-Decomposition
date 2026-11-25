@@ -10,12 +10,13 @@ COUNT_DEFAULTS = {
     "composition-orbit-seed-terms": 65536,
     "composition-orbit-product-terms": 65536,
     "composition-nilpotent-rounds": 8,
-    "composition-sparse-seeds": 8,
-    "composition-sparse-products": 8192,
-    "composition-sparse-pair-visits": 131072,
-    "composition-sparse-seed-basis": 8,
-    "composition-sparse-seed-terms": 256,
-    "composition-sparse-product-terms": 65536,
+    "composition-certificate-visits": 8192,
+    "composition-nilpotent-seeds": 8,
+    "composition-nilpotent-products": 8192,
+    "composition-nilpotent-pair-visits": 131072,
+    "composition-nilpotent-seed-basis": 8,
+    "composition-nilpotent-seed-terms": 256,
+    "composition-nilpotent-product-terms": 65536,
 }
 
 
@@ -25,8 +26,9 @@ def nonnegative_count(value):
     return int(value)
 
 
-def add_generator_arguments(parser, *, rounds=None, modes=None):
+def add_generator_arguments(parser, *, rounds=None, modes=None, defaults=None):
     for name, default in COUNT_DEFAULTS.items():
+        default = (defaults or {}).get(name, default)
         settings = dict(type=nonnegative_count, default=default,
                         help=f"Composition search count (default: {default})")
         if name == "composition-orbit-rounds" and rounds is not None:

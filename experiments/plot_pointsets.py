@@ -155,8 +155,7 @@ def plot_experiment(experiment=None, bundle=DATA, renderer=ROOT / "build/experim
                 image_path = Path(row["family"]) / f"{stem}.png"
                 if (not (output / image_path).is_file() or old.get("scc_sha256") != row["scc_sha256"]
                         or old.get("renderer_sha256") != renderer_hash):
-                    result = subprocess.run([str(renderer), str(presentation), str(output / image_path),
-                                             f"{row['family']}: H{row['homology']}, n={row['n_points']}"],
+                    result = subprocess.run([str(renderer), str(presentation), str(output / image_path)],
                                             capture_output=True, text=True, timeout=180, check=True)
                     metrics = json.loads(result.stdout)
                 else:

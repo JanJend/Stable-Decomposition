@@ -18,14 +18,17 @@ void require(bool condition, const char* message) {
 
 sd::PruningOptions options_for(unsigned mask) {
     sd::PruningOptions options;
+    options.threads = 1;
     options.projected_preimages = mask & 1;
     options.amortize_reductions = mask & 2;
     options.full_end_space = mask & 4;
     options.composition_generators = (mask & 8) || (mask & 64);
-    options.composition_budget.sparse_nilpotent = mask & 8;
+    options.composition_budget.nilpotent_reduction = mask & 8;
     options.composition_budget.complement_orbit = mask & 64;
     options.adaptive_restriction = mask & 16;
     options.reuse_target_reductions = mask & 32;
+    options.single_solve_quotient = mask & 128;
+    options.update_i_target = mask & 256;
     return options;
 }
 
@@ -44,6 +47,40 @@ void check_pruning(const Matrix& matrix, double epsilon, bool exhaustive = true)
     sd::PruningProfile baseline_profile;
     const auto baseline_pair = sd::pruning_pair(*parent, epsilon, false, &baseline_profile, options_for(0));
     const auto baseline = sd::pruning(Module(matrix), epsilon, false, nullptr, options_for(0));
+    sd::PruningProfile serial_profile;
+    sd::PruningOptions serial_options;
+    serial_options.threads = 1;
+    const auto serial_pair = sd::pruning_pair(*parent, epsilon, false, &serial_profile, serial_options);
+    for (int threads : {sd::PruningOptions{}.threads, 2, 3, 4}) {
+        sd::PruningOptions options;
+        options.threads = threads;
+        sd::PruningProfile profile;
+        const auto pair = sd::pruning_pair(*parent, epsilon, false, &profile, options);
+        require(pair.first.equals(serial_pair.first) && pair.second.equals(serial_pair.second),
+                "Parallel pruning changed I or K");
+        require(pair.first.parent() == parent && pair.second.parent() == parent,
+                "Parallel pruning changed parent identity");
+        require(profile.i_iterations == serial_profile.i_iterations &&
+                profile.k_iterations == serial_profile.k_iterations &&
+                profile.i_restriction_candidates == serial_profile.i_restriction_candidates &&
+                profile.k_restriction_candidates == serial_profile.k_restriction_candidates &&
+                profile.i_restriction_kept == serial_profile.i_restriction_kept &&
+                profile.k_restriction_kept == serial_profile.k_restriction_kept &&
+                profile.i_preimage.calls == serial_profile.i_preimage.calls &&
+                profile.k_preimage.calls == serial_profile.k_preimage.calls,
+                "Parallel pruning changed iteration counts, restrictions or profiling counts");
+        const auto result = sd::pruning(Module(matrix), epsilon, false, nullptr, options);
+        require(gl::is_isomorphic(coordinate_matrix(baseline.presentation()),
+                                 coordinate_matrix(result.presentation())),
+                "Parallel pruning changed the output module");
+        options.parallel_i = true;
+        for (bool minimize_target : {false, true}) {
+            options.minimize_i_target = minimize_target;
+            const auto parallel_pair = sd::pruning_pair(*parent, epsilon, false, nullptr, options);
+            require(parallel_pair.first.equals(serial_pair.first) && parallel_pair.second.equals(serial_pair.second),
+                    "Parallel fixed-target I or J minimization changed the pruning pair");
+        }
+    }
     // All three Hom algorithms must feed the same pruning pair, including
     // the composition-generator branch which previously forced exactness.
     for (auto algorithm : {gl::HomAlgorithm::optimised, gl::HomAlgorithm::full_restriction, gl::HomAlgorithm::hom_exactness}) {
@@ -58,22 +95,25 @@ void check_pruning(const Matrix& matrix, double epsilon, bool exhaustive = true)
     }
     std::vector<unsigned> masks;
     if (exhaustive) {
-        for (unsigned mask = 0; mask < 128; ++mask) masks.push_back(mask);
+        for (unsigned mask = 0; mask < 512; ++mask) masks.push_back(mask);
     } else {
         // Larger inputs cover full-End/composition/adaptive/reuse combinations with
-        // two kernel/batching settings; small fixtures cover all 128 combinations.
-        for (unsigned added = 0; added < 32; ++added)
+        // two kernel/batching settings; small fixtures cover all 512 combinations.
+        for (unsigned added = 0; added < 128; ++added)
             for (unsigned prior : {0u, 3u}) masks.push_back(prior | (added << 2));
     }
     for (unsigned mask : masks) {
-        const auto options = options_for(mask);
+        auto options = options_for(mask);
+        options.threads = 1 + mask % 4;
         sd::PruningProfile profile;
         const auto pair = sd::pruning_pair(*parent, epsilon, false, &profile, options);
         require(pair.first.equals(baseline_pair.first), "I changed under an optimization");
         require(pair.second.equals(baseline_pair.second), "K changed under an optimization");
-        if (!options.full_end_space)
-            require(profile.i_iterations == baseline_profile.i_iterations &&
-                    profile.k_iterations == baseline_profile.k_iterations, "Iteration counts changed");
+        if (!options.full_end_space) {
+            require(profile.k_iterations == baseline_profile.k_iterations, "K iteration counts changed");
+            if (!options.update_i_target)
+                require(profile.i_iterations == baseline_profile.i_iterations, "Standard I iteration counts changed");
+        }
         require(profile.i_restriction_kept <= profile.i_restriction_candidates &&
                 profile.k_restriction_kept <= profile.k_restriction_candidates, "Adaptive restriction increased its family");
         const auto result = sd::pruning(Module(matrix), epsilon, false, nullptr, options);
@@ -81,6 +121,60 @@ void check_pruning(const Matrix& matrix, double epsilon, bool exhaustive = true)
         require(gl::is_isomorphic(coordinate_matrix(baseline.presentation()),
                                    coordinate_matrix(result.presentation())), "Pruning output changed");
     }
+}
+
+void check_i_target_updates() {
+    // f sends e1 to e2, then g sends e0 to e1. With shift (2,2), the
+    // updated target propagates both constraints in one pass instead of two.
+    const gl::vec<gl::r2degree> births{{0,0}, {1,1}, {2,2}};
+    auto parent = std::make_shared<const sd::Module>(sd::Mat(0, 3, {}, {}, births));
+    const auto eta = sd::Hom::canonical_shift(parent, {2,2});
+    const auto& shifted = eta.target()->presentation().row_degrees;
+    const std::vector<sd::Hom> maps{
+        sd::Hom(parent, eta.target(), sd::Mat(3, 3, {{}, {2}, {}}, births, shifted)),
+        sd::Hom(parent, eta.target(), sd::Mat(3, 3, {{1}, {}, {}}, births, shifted))};
+    const sd::Submodule expected(parent,
+        sd::Mat(3, 3, {{0}, {1}, {2}}, {{2,2}, {2,2}, {2,2}}, births));
+    for (bool adaptive : {false, true}) for (bool reuse : {false, true})
+        for (bool projected : {false, true}) for (bool updated : {false, true})
+        for (bool minimize_target : {false, true}) {
+            auto options = options_for(0);
+            options.adaptive_restriction = adaptive;
+            options.reuse_target_reductions = reuse;
+            options.projected_preimages = projected;
+            options.update_i_target = updated;
+            options.minimize_i_target = minimize_target;
+            const auto result = sd::compute_pruning_i(eta, maps, nullptr, options, false);
+            require(result.first.equals(expected), "I target mode changed the stable submodule");
+            require(result.second == (updated ? 2 : 3), "I target mode did not change pass propagation");
+            if (!updated) for (int threads : {1, 2, 4}) {
+                options.parallel_i = true;
+                options.threads = threads;
+                sd::PruningProfile timing;
+                const auto parallel = sd::compute_pruning_i(eta, maps, &timing, options, false);
+                require(parallel.first.equals(expected) && parallel.second == result.second,
+                        "Independent constraint groups changed I or its fixed-target passes");
+                require(timing.i_preimage.calls == timing.i_reduce.calls && timing.i_preimage.calls > 0,
+                        "Parallel I lost worker timings");
+                require((timing.i_target_reduce.calls > 0) == minimize_target,
+                        "J was minimized despite the requested setting");
+                if (threads > 1 && !adaptive)
+                    require(timing.i_intersection.calls > 0, "Parallel I did not merge different worker submodules");
+            }
+        }
+    // Identity constraints leave I fixed. Fast I must reuse its image/target
+    // while the changing-constraint case above still refreshes when necessary.
+    auto free = std::make_shared<const sd::Module>(sd::Mat(0, 2, {}, {}, {{0,0}, {1,1}}));
+    const auto shift = sd::Hom::canonical_shift(free, {2,2});
+    std::vector<sd::Hom> identities(70, shift);
+    auto options = options_for(0);
+    options.update_i_target = options.reuse_target_reductions = true;
+    sd::PruningProfile profile;
+    const auto fixed = sd::compute_pruning_i(shift, identities, &profile, options, false);
+    require(fixed.second == 1 && fixed.first.equals(free->whole_submodule()), "Identity constraints changed I");
+    require(profile.i_image.calls == 2 * identities.size() && profile.i_shift.calls == 1 &&
+            profile.i_target_prepare.calls == 1 && profile.i_target_reduce.calls == 0,
+            "Fast I refreshed an unchanged image or target");
 }
 
 void check_projected_preimages() {
@@ -127,11 +221,66 @@ void check_adaptive_restriction_grades() {
     sd::Mat identity(1, 1, {{0}}, {{0, 0}}, {{0, 0}});
     std::vector<sd::Hom> maps{sd::Hom(parent, parent, identity), sd::Hom(parent, parent, identity)};
     sd::Mat target(1, 1, {{0}}, {{1, 1}}, {{0, 0}});
-    require(sd::pruning_adaptive_restriction(maps, identity, target) == std::vector<std::size_t>{0},
-            "A later target generator incorrectly killed an earlier map restriction");
     sd::Mat later(1, 1, {{0}}, {{2, 2}}, {{0, 0}});
-    require(sd::pruning_adaptive_restriction(maps, later, target).empty(),
-            "A target generator did not kill a restriction at a later grade");
+    for (int threads : {1, 2, 3, 4}) {
+        require(sd::pruning_adaptive_restriction(maps, identity, target, threads) == std::vector<std::size_t>{0},
+                "A later target generator incorrectly killed an earlier map restriction");
+        require(sd::pruning_adaptive_restriction(maps, later, target, threads).empty(),
+                "A target generator did not kill a restriction at a later grade");
+    }
+    for (std::size_t failing_job : {0u, 1u}) {
+        bool caught = false;
+        try {
+            gl::parallel_for(4, 2, [&](std::size_t i) {
+                if (i == failing_job) throw std::runtime_error("worker failure");
+            });
+        } catch (const std::runtime_error& error) {
+            caught = std::string(error.what()) == "worker failure";
+        }
+        require(caught, "Parallel worker exception was lost");
+    }
+}
+
+void check_coefficient_families_and_batches() {
+    // Duplicates and F2 cancellations straddle several 32-map batch boundaries.
+    auto parent = std::make_shared<const sd::Module>(sd::Mat(0, 3, {}, {}, {{0,0}, {1,0}, {0,1}}));
+    const auto eta = sd::Hom::canonical_shift(parent, {3,3});
+    sd::PruningCoefficients coefficients(97, 9);
+    coefficients.resize_data(97);
+    std::mt19937 random(572934);
+    for (int c = 0; c < 97; ++c) {
+        gl::vec<std::ptrdiff_t> entries;
+        if (c % 3) for (int r = 0; r < 9; ++r) if (random() % 2) entries.push_back(r);
+        coefficients.set_col(c, entries);
+    }
+    const auto maps = gl::homomorphisms_from_coefficients(coefficients, eta.domain(), eta.target());
+    const sd::PruningMapFamily<sd::Mat> family(coefficients, eta.domain(), eta.target());
+    const auto source = parent->whole_submodule().generator_map().generator_lift();
+    sd::Mat target(2, 3, {{0,1}, {1,2}}, {{1,0}, {0,1}}, eta.target()->presentation().row_degrees);
+    std::vector<sd::Mat> restrictions;
+    for (std::size_t i = 0; i < maps.size(); ++i) {
+        const auto lift = family[i].generator_lift();
+        require(sd::pruning_same_generators(lift, maps[i].generator_lift()), "Coefficient family changed a lift");
+        require(lift.row_degrees == maps[i].generator_lift().row_degrees, "Coefficient family changed target grades");
+        restrictions.push_back(maps[i].generator_lift() * source);
+    }
+    const auto expected = gl::independent_matrix_family_indices_modulo_target_relations(restrictions, target);
+    for (int threads : {1, 2, 4}) {
+        require(sd::pruning_adaptive_restriction(family, source, target, threads) == expected,
+                "Batched coefficient restrictions changed the independent indices");
+        require(sd::pruning_adaptive_restriction(maps, source, target, threads) == expected,
+                "Batched materialized restrictions changed the independent indices");
+    }
+    using Grid = gl::GridGradedSparseMatrix<double, 2, int>;
+    auto grid_parent = std::make_shared<const gl::Module<Grid>>(Grid(parent->presentation()));
+    const auto grid_eta = gl::Homomorphism<Grid>::canonical_shift(grid_parent, {3,3});
+    const sd::PruningMapFamily<Grid> grid_family(coefficients, grid_eta.domain(), grid_eta.target());
+    const auto grid_source = grid_parent->whole_submodule().generator_map().generator_lift();
+    require(sd::pruning_adaptive_restriction(grid_family, grid_source, Grid(target), 2) == expected,
+            "Batched restrictions changed physical grid degrees");
+    auto later = source;
+    later.col_degrees[0] = {0.5,0.5};
+    require(!sd::pruning_same_generators(source, later), "Cache equality ignored generator degrees");
 }
 
 template<std::size_t Dimension>
@@ -143,7 +292,7 @@ void check_other_dimensions() {
     auto parent = std::make_shared<const Module>(Matrix(0, 2, {}, {early, late}));
     sd::PruningProfile expected_profile;
     const auto expected = sd::pruning_pair(*parent, 0.5, false, &expected_profile);
-    for (unsigned added = 0; added < 32; ++added) for (unsigned prior : {0u, 3u}) {
+    for (unsigned added = 0; added < 64; ++added) for (unsigned prior : {0u, 3u}) {
         sd::PruningProfile profile;
         const auto options = options_for(prior | (added << 2));
         const auto result = sd::pruning_pair(*parent, 0.5, false, &profile, options);
@@ -235,7 +384,10 @@ void check_budgeted_composition_certificates() {
         sd::Mat(0, 4, {}, {}, {{0,1}, {0,1}, {1,0}, {1,0}}),
         sd::Mat(2, 3, {{0,1}, {1,2}}, {{2,2}, {3,3}}, {{0,0}, {1,1}, {2,2}}),
         // Nonminimal cover: a same-birth relation changes possible lifts.
-        sd::Mat(1, 3, {{0,1}}, {{0,0}}, {{0,0}, {0,0}, {1,1}})
+        sd::Mat(1, 3, {{0,1}}, {{0,0}}, {{0,0}, {0,0}, {1,1}}),
+        // No generator ever vanishes and every generator occurs in a relation:
+        // the inexpensive ungraded check must reject all elementary factors.
+        sd::Mat(2, 3, {{0,1}, {1,2}}, {{3,3}, {4,4}}, {{0,0}, {1,1}, {2,2}})
     };
     for (std::size_t example = 0; example < examples.size(); ++example) {
         auto parent = std::make_shared<const sd::Module>(examples[example]);
@@ -247,6 +399,15 @@ void check_budgeted_composition_certificates() {
             std::vector<sd::Hom> denominator;
             if (quotient) for (const auto& e : end) denominator.push_back(e.compose(eta));
             const auto basis = gl::homomorphism_quotient_basis(hom, denominator);
+            // Check the production quotient representatives against the
+            // independently computed full Hom space and canonical-shift image.
+            for (auto algorithm : {gl::HomAlgorithm::optimised, gl::HomAlgorithm::full_restriction,
+                                   gl::HomAlgorithm::hom_exactness}) for (bool single : {false, true}) {
+                const auto families = sd::pruning_composition_generators(
+                    eta, delta, algorithm, nullptr, !quotient, {}, single);
+                require_composition_span(basis, end, families.first, delta, denominator, true);
+                require_composition_span(basis, end, families.second, delta, denominator, false);
+            }
             for (int setting = 0; setting < 5; ++setting) {
                 gl::CompositionGeneratorOptions options;
                 options.complement_orbit = false;
@@ -261,6 +422,9 @@ void check_budgeted_composition_certificates() {
                     require(maps.size() <= basis.size(), "Budgeted search increased the family size");
                     require(stats[side].products <= options.max_products &&
                             stats[side].pair_visits <= options.max_pair_visits, "Composition budget exceeded");
+                    require(stats[side].products + stats[side].elementary_certificates <= options.max_products &&
+                            stats[side].certificate_visits <= options.max_certificate_visits,
+                            "Elementary certificate budget exceeded");
                     if (setting == 1) require(maps.size() == basis.size(), "Zero budget lost basis vectors");
                     if (setting == 4) require(maps.size() == basis.size(), "Rejected products removed basis vectors");
                     for (std::size_t j = 0; j < stats[side].seeds; ++j) {
@@ -277,16 +441,19 @@ void check_budgeted_composition_certificates() {
                     if (example == 0 && setting == 3 && quotient)
                         require(stats[side].nilpotent_rank > 0 && maps.size() < basis.size(),
                                 "Nilpotent actions failed to remove generators without retained seeds");
+                    if (example == 4)
+                        require(stats[side].certificate_visits == 0 && stats[side].elementary_certificates == 0,
+                                "Impossible elementary factors were searched");
                     require_composition_span(basis, end, maps, delta, denominator, side == 0);
                 }
             }
             // Independent switches, partial orbits, and chaining the original
-            // coordinate certificate (the sparse output need not be a VS basis).
+            // coordinate certificate (the nilpotent-reduction output need not be a VS basis).
             const auto prepared = basis.empty() ? nullptr :
                 std::make_unique<gl::PreparedCompositionCoordinates<sd::Mat>>(basis, denominator);
             for (unsigned method = 0; method < 4; ++method) for (int budget = 0; budget < 9; ++budget) {
                 gl::CompositionGeneratorOptions options;
-                options.sparse_nilpotent = method & 1;
+                options.nilpotent_reduction = method & 1;
                 options.complement_orbit = method & 2;
                 if (budget == 1) options.orbit_max_pair_visits = 1;
                 if (budget == 2) options.orbit_max_seed_terms = 0;
@@ -324,9 +491,9 @@ void check_budgeted_composition_certificates() {
                     require(stats[side].largest_orbit_seed <= options.orbit_max_seed_terms,
                             "Complement-orbit exceeded its density budget");
                     if (method && !basis.empty()) {
-                        require(maps.size() <= stats[side].sparse_generators,
-                                "Adding the orbit stage increased the sparse output");
-                        if (budget == 2 || budget == 3 || budget == 6 || budget == 8) require(maps.size() == stats[side].sparse_generators,
+                        require(maps.size() <= stats[side].nilpotent_generators,
+                                "Adding the orbit stage increased the nilpotent-reduction output");
+                        if (budget == 2 || budget == 3 || budget == 6 || budget == 8) require(maps.size() == stats[side].nilpotent_generators,
                                                 "Skipped orbits changed the generating family");
                     }
                     if (method == 0) require(maps.size() == basis.size(), "Disabled methods lost basis maps");
@@ -334,6 +501,96 @@ void check_budgeted_composition_certificates() {
                 }
             }
 
+        }
+    }
+}
+
+void check_elementary_composition_certificates() {
+    const std::vector<gl::r2degree> births{{0,2}, {1,3}, {3,0}};
+    const gl::r2degree delta{3,3};
+    const std::vector<sd::Mat> examples{
+        sd::Mat(0, 3, {}, {}, births),
+        // E_01 violates the relation g_0 + g_1, although the row match exists.
+        sd::Mat(1, 3, {{0,1}}, {{4,4}}, births),
+        // E_01 is valid, but moving E_02 to row 1 violates the death of g_2.
+        sd::Mat(3, 3, {{2}, {0}, {1}}, {{4,0}, {7,3}, {8,4}}, births)
+    };
+    for (std::size_t example = 0; example < examples.size(); ++example) {
+        auto parent = std::make_shared<const sd::Module>(examples[example]);
+        const auto eta = sd::Hom::canonical_shift(parent, delta);
+        auto end = gl::module_endomorphism_basis(parent, gl::HomAlgorithm::hom_exactness);
+        const auto hom = gl::module_hom_space_basis(parent, eta.target(), gl::HomAlgorithm::hom_exactness);
+        std::vector<sd::Hom> denominator;
+        for (const auto& e : end) denominator.push_back(e.compose(eta));
+        const auto basis = gl::homomorphism_quotient_basis(hom, denominator);
+        const auto target_births = gl::geometric_row_degrees(eta.target()->presentation());
+        const sd::Mat t(3, 3, {{}, {0}, {}}, births, births);
+        const sd::Mat h(3, 3, {{}, {}, {1}}, births, target_births);
+        const sd::Mat f(3, 3, {{}, {}, {0}}, births, target_births);
+        require(gl::is_homomorphism(examples[example], eta.target()->presentation(), f),
+                "Elementary certificate fixture has an invalid F");
+        require(gl::is_homomorphism(examples[example], examples[example], t) == (example != 1),
+                "Elementary certificate fixture has the wrong T compatibility");
+        require(gl::is_homomorphism(examples[example], eta.target()->presentation(), h) == (example != 2),
+                "Elementary certificate fixture has the wrong H compatibility");
+        if (example == 0) {
+            // These one-dimensional Hom subspaces are invariant, but their
+            // row/column-moved factors lie outside the supplied subspace.
+            gl::CompositionGeneratorOptions isolated;
+            isolated.complement_orbit = false;
+            isolated.nilpotent_rounds = isolated.max_seeds = 0;
+            const sd::Mat right_f(3, 3, {{}, {2}, {}}, births, target_births);
+            for (const auto& lift : {f, right_f}) {
+                const std::vector<sd::Hom> subspace{sd::Hom(parent, eta.target(), lift)};
+                std::array<gl::CompositionGeneratorStats, 2> stats;
+                const auto result = gl::budgeted_composition_generators(subspace, end, {}, isolated, &stats);
+                require(result.first.size() == 1 && result.second.size() == 1 &&
+                        stats[0].elementary_certificates == 0 && stats[1].elementary_certificates == 0,
+                        "A factor outside the supplied Hom subspace removed a generator");
+            }
+            // Hide E_01 in a basis combination. The new pass must validate this
+            // factor on demand instead of relying on a lowering End basis vector.
+            for (auto& e : end) {
+                auto& lift = e.generator_lift();
+                if (lift.column(0).empty() && lift.get_col(1) == gl::vec<int>{0} && lift.column(2).empty())
+                    lift.set_col(0, {0});
+            }
+        }
+        for (std::size_t visits : {std::size_t(0), std::size_t(1), std::size_t(8192)}) {
+            gl::CompositionGeneratorOptions options;
+            options.complement_orbit = false;
+            options.nilpotent_rounds = options.max_seeds = 0;
+            options.max_certificate_visits = visits;
+            std::array<gl::CompositionGeneratorStats, 2> stats;
+            const auto result = gl::budgeted_composition_generators(basis, end, denominator, options, &stats);
+            for (std::size_t side = 0; side < 2; ++side) {
+                const auto& maps = side ? result.second : result.first;
+                require(stats[side].products == 0 && stats[side].certificate_visits <= visits,
+                        "Direct certificate performed a product or exceeded its visit cap");
+                if (!visits) require(maps.size() == basis.size(), "Disabled certificates removed maps");
+                if (example == 0 && visits == 8192)
+                    require(stats[side].nilpotent_endomorphisms == 0 &&
+                            stats[side].elementary_certificates > 0 && maps.size() < basis.size(),
+                            "Direct certificate missed a factor hidden in End basis combinations");
+                if (example == 1 || (example == 2 && side == 0))
+                    require(stats[side].elementary_certificates == 0,
+                            "Invalid elementary factor passed the relation checks");
+                require_composition_span(basis, end, maps, delta, denominator, side == 0);
+            }
+        }
+        if (example == 0) {
+            gl::CompositionGeneratorOptions options;
+            options.complement_orbit = false;
+            options.max_products = 2; // One direct certificate fills the nilpotent half.
+            std::array<gl::CompositionGeneratorStats, 2> stats;
+            const auto result = gl::budgeted_composition_generators(basis, end, denominator, options, &stats);
+            for (std::size_t side = 0; side < 2; ++side) {
+                require(stats[side].elementary_certificates == 1 && stats[side].products == 0 &&
+                        stats[side].coordinate_preparations == 0 && stats[side].seeds == 0,
+                        "Filled direct-certificate budget still prepared coordinates or ordinary seeds");
+                require_composition_span(basis, end, side ? result.second : result.first,
+                                         delta, denominator, side == 0);
+            }
         }
     }
 }
@@ -369,11 +626,14 @@ void check_empty_hom_quotient() {
 int main(int argc, char** argv) {
     try {
         check_projected_preimages();
+        check_i_target_updates();
         check_adaptive_restriction_grades();
+        check_coefficient_families_and_batches();
         check_other_dimensions<1>();
         check_other_dimensions<3>();
         check_composition_generators();
         check_budgeted_composition_certificates();
+        check_elementary_composition_certificates();
         check_empty_hom_quotient();
         const std::filesystem::path fixtures(PRUNING_TEST_FIXTURE_DIR);
         for (int i = 1; i <= 4; ++i) {
@@ -393,7 +653,7 @@ int main(int argc, char** argv) {
         check_pruning(sd::Mat(2, 2, {{0}, {1}}, {{0.5, 0}, {1.5, 0}}, {{0, 0}, {1, 0}}), 1.0);
         check_pruning(sd::Mat(0, 0, {}, {}, {}), 0.5);
         if (argc == 3) check_pruning(sd::Module(argv[1]).presentation(), std::stod(argv[2]), false);
-        std::cout << "PASS: all 128 small-fixture switch combinations, pruning pairs, exact isomorphism, grids and CSC\n";
+        std::cout << "PASS: all 512 small-fixture switch combinations, both I target modes, 1-4 threads, pruning pairs, exact isomorphism, grids and CSC\n";
         return 0;
     } catch (const std::exception& error) {
         std::cerr << "FAIL: " << error.what() << '\n';

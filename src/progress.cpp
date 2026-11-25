@@ -9,15 +9,21 @@ void print_module_pruning_profile(std::ostream& out, const PruningProfile& profi
   const auto flags = out.flags();
   const auto precision = out.precision();
   out << "\nModule pruning options (0=off, 1=on):"
+      << " threads=" << options.threads
       << " projected_preimages=" << int(options.projected_preimages)
       << " full_end_space=" << int(options.full_end_space)
       << " composition_generators=" << int(options.composition_generators)
-      << " sparse_nilpotent_generators=" << int(options.composition_generators && options.composition_budget.sparse_nilpotent)
+      << " nilpotent_reduction=" << int(options.composition_generators && options.composition_budget.nilpotent_reduction)
       << " complement_orbit_generators=" << int(options.composition_generators && options.composition_budget.complement_orbit)
       << " amortize_reductions=" << int(options.amortize_reductions)
       << " hom_algorithm=" << graded_linalg::hom_algorithm_name(options.hom_algorithm)
       << " adaptive_restriction=" << int(options.adaptive_restriction)
-      << " reuse_target_reductions=" << int(options.reuse_target_reductions) << '\n'
+      << " reuse_target_reductions=" << int(options.reuse_target_reductions)
+      << " single_solve_quotient=" << int(options.single_solve_quotient)
+      << " update_i_target=" << int(options.update_i_target)
+      << " minimize_i_target=" << int(options.minimize_i_target)
+      << " parallel_i=" << int(options.parallel_i)
+      << " parallel_k=" << int(options.parallel_k) << '\n'
       << "I iterations: " << profile.i_iterations << "; K iterations: " << profile.k_iterations << '\n'
       << (options.full_end_space ? "Initial full Hom basis: " : "Initial Hom quotient: ") << profile.original_maps
       << "; I maps: " << profile.i_maps << "; K maps: " << profile.k_maps << '\n';
@@ -39,7 +45,10 @@ void print_module_pruning_profile(std::ostream& out, const PruningProfile& profi
   };
   row("Total", profile.total);
   row(options.full_end_space ? "End_d" : "End_d/0", profile.basis);
+  row("  End_0", profile.end0); row("  Hom quotient", profile.hom_quotient);
+  row("  Composition generators", profile.composition); row("Map family setup / lifts", profile.map_lifts);
   row("I phase", profile.i_phase); row("K phase", profile.k_phase);
+  row("I shift image", profile.i_shift); row("I target minimization", profile.i_target_reduce);
   row("I target preparation", profile.i_target_prepare);
   row("I adaptive restriction", profile.i_adaptive_restriction); row("K adaptive restriction", profile.k_adaptive_restriction);
   row("I preimage", profile.i_preimage); row("I intersection", profile.i_intersection);
@@ -47,6 +56,7 @@ void print_module_pruning_profile(std::ostream& out, const PruningProfile& profi
   row("I convergence check", profile.i_equal); row("K preimage", profile.k_preimage);
   row("K image / composition", profile.k_image); row("K sum", profile.k_sum);
   row("K generator reduction", profile.k_reduce);
+  row("K worker sums", profile.k_merge);
   row("K convergence check", profile.k_equal); row("Quotient", profile.quotient);
   row("Presentation", profile.presentation); row("Minimization", profile.minimize);
   out << "Phase times include progress output. Operation times include internal minimization.\n";

@@ -9,11 +9,17 @@ def check(worker):
     generators, relations, extent = presentation_info(path)
     assert generators > 0 and relations > 0 and extent > 0
     baseline = run(worker, path, extent * 0.01, 0, 10, 4096, False)
-    optimized = run(worker, path, extent * 0.01, 123, 10, 4096, False)
-    assert baseline["status"] == optimized["status"] == "ok"
+    optimized = run(worker, path, extent * 0.01, 251, 10, 4096, False)
+    single = run(worker, path, extent * 0.01, 128, 10, 4096, False)
+    fast = run(worker, path, extent * 0.01, 256, 10, 4096, False)
+    assert baseline["status"] == optimized["status"] == single["status"] == fast["status"] == "ok"
     assert baseline["seconds"] >= baseline["profile_seconds"] > 0
     assert all(baseline[k] == optimized[k] for k in
                ("i_iterations", "k_iterations", "generators_out", "relations_out"))
+    assert all(baseline[k] == single[k] for k in
+               ("i_iterations", "k_iterations", "generators_out", "relations_out"))
+    assert all(baseline[k] == fast[k] for k in
+               ("k_iterations", "generators_out", "relations_out"))
     larger = HERE / "data/presentations/torus_gauss/torus_gauss_160_1_H1.scc"
     timeout = run(worker, larger, 0.008837960620266386, 0, 0.01, 4096, False)
     assert timeout["status"] == "timeout" and timeout["seconds_lower_bound"] >= 0.01

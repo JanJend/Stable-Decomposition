@@ -48,12 +48,20 @@ def check_configurations(directory):
                 enabled.add("full-end-space")
             expected = optimizations if variant == "all-optimizations" else ({variant} if variant in SWITCHES else set())
             assert enabled == expected, (variant, enabled)
+            assert ("--no-single-solve-quotient" not in result["command"]) == (
+                variant in ("single-solve-quotient", "all-optimizations"))
+            assert ("--update-i-target" in result["command"]) == ("update-i-target" in expected)
             assert not flags & {"fuse-i-preimage", "defer-k-image-minimization", "throttle-progress", "dense-kernel-pivots", "no-dense-kernel-pivots"}
             assert "hom-algorithm=optimised" in flags
             observations.append(dict(dataset="fake", family="fake", seed=42, n_points=20,
                                      target_points=20, homology=1, generators=1, relations=1,
                                      epsilon_percent=percentage, epsilon=percentage / 100,
                                      variant=variant, repetition=1, timeout_seconds=10, **result))
+    vector_result = execute(fake, directory / "unused.scc", (0.01, 0.001), "baseline", 10, 0, "compact")
+    command = vector_result["command"]
+    position = command.index("--epsilon-vector")
+    assert command[position + 1:position + 3] == ["0.01", "0.001"]
+    assert "--epsilon" not in command
     parser = argparse.ArgumentParser()
     add_generator_arguments(parser, rounds=[3, 6, 12], modes=["hybrid"])
     configs = generator_sweep(parser.parse_args(["--composition-orbit-seed-mode", "sum", "random"]))
@@ -63,7 +71,7 @@ def check_configurations(directory):
         assert result["status"] == "ok", result
         assert result["generator_settings"]["composition-orbit-rounds"] == str(settings["composition-orbit-rounds"])
         assert result["i_maps"] == 3 and result["k_maps"] == 2
-        assert "--no-sparse-nilpotent-generators" not in result["command"]
+        assert "--no-nilpotent-reduction" not in result["command"]
         assert "--no-complement-orbit-generators" not in result["command"]
     assert execute(fake, directory / "unused.scc", 0.01, "baseline", 10, 0, "vector")["status"] == "error"
     write_reports(observations, directory, "optimizations")
@@ -73,6 +81,8 @@ def check_configurations(directory):
     assert [float(row["baseline_seconds"]) for row in rows] == [0.01, 0.08]
     assert {name[:-8] for name in rows[0] if name.endswith("_seconds")} == set(VARIANTS)
     assert "optional switches off" in (directory / "table.tex").read_text()
+    assert "Fast I" in (directory / "table.tex").read_text()
+    assert "update-i-target_seconds" in rows[0]
     with (directory / "speedups.csv").open() as stream:
         percentages = list(csv.DictReader(stream))
     assert len(percentages) == 2
@@ -88,8 +98,15 @@ def check_configurations(directory):
         assert all(row["hom-quotient_speedup_percent"] == "+300.0%" for row in csv.DictReader(stream))
     speedup_latex = (directory / "speedups.tex").read_text()
     assert " & Base & " not in speedup_latex
-    assert speedup_latex.index(" & Sparse & ") < speedup_latex.index(" & Adaptive & ")
+    assert speedup_latex.index(" & Nilpotent & ") < speedup_latex.index(" & Adaptive & ")
     assert "Orbit" in speedup_latex
+    assert "Direct Q" in speedup_latex
+    assert "End0 is still computed separately when needed for module actions" in speedup_latex
+    altered = [dict(row, pruning_seconds=row["pruning_seconds"] / 4)
+               if row["variant"] == "single-solve-quotient" else row for row in observations]
+    write_reports(altered, directory, "optimizations")
+    with (directory / "speedups.csv").open() as stream:
+        assert all(row["single-solve-quotient_speedup_percent"] == "+300.0%" for row in csv.DictReader(stream))
     baseline = dict(completed=1, status="ok", pruning_seconds=2)
     assert speedup_cell(baseline, dict(baseline, pruning_seconds=1)) == "+100.0%"
     assert speedup_cell(baseline, dict(baseline, pruning_seconds=4)) == "-50.0%"
@@ -103,12 +120,12 @@ def check_configurations(directory):
 
 
 def check_latex_layout(directory):
-    """All 18 averaged rows fit a standard portrait table without page changes."""
+    """All 27 averaged rows fit a standard portrait table without page changes."""
     entry = dict(column_storage="compact")
     entry.update((name + "_speedup_percent", "+850.3% [partial]") for name in SPEEDUP_NAMES)
     entries = [dict(entry, family=family, n_points=n, epsilon_percent=epsilon)
                for family in ("gauss_clust", "immuno", "torus_gauss")
-               for n in (80, 160, 320) for epsilon in (1, 8)]
+               for n in (160, 320, 640) for epsilon in (0.5, 1, 2)]
     write_latex(directory / "wide.tex", entries, "optimizations", percentages=True)
     source = (directory / "wide.tex").read_text()
     assert source.count(r"\begin{table}") == source.count(r"\begin{tabular}") == source.count(r"\caption{") == 1
@@ -137,16 +154,17 @@ def check_entry_points():
             with patch.object(paper_benchmarks, "main") as run, patch("subprocess.run") as generate:
                 with patch.object(sys, "argv", [f"benchmark_{kind}.py"]):
                     with patch.object(Path, "is_file", return_value=False):
-                        runpy.run_path(str(HERE / f"benchmark_{kind}.py"), run_name="__main__")
+                        settings = runpy.run_path(str(HERE / f"benchmark_{kind}.py"), run_name="__main__")
                 run.assert_called_once()
                 assert run.call_args.args == (kind,)
-                assert run.call_args.kwargs["points"] == (
-                    [80, 160, 320] if kind == "optimizations" else [20, 40, 80, 160, 320, 640, 1280, 2560])
-                assert run.call_args.kwargs["epsilon_percents"] == ([1, 8] if kind == "optimizations" else [1, 2, 4, 8])
+                assert run.call_args.kwargs["points"] == settings["POINT_COUNTS"]
+                assert run.call_args.kwargs["epsilon_percents"] == settings["EPSILON_PERCENTAGES"]
                 if kind == "optimizations":
                     assert set(run.call_args.kwargs["families"]) == {"torus_gauss", "immuno", "gauss_clust"}
                     configs = run.call_args.kwargs["generator_configs"]
-                    assert list(configs) == ["generators-hybrid-3", "generators-hybrid-6", "generators-hybrid-12"]
+                    assert list(configs) == [f"generators-{mode}-{rounds}"
+                                             for mode in settings["ORBIT_SEED_MODES"]
+                                             for rounds in settings["ORBIT_ROUNDS"]]
                 else:
                     assert "families" not in run.call_args.kwargs
                 assert "manifest" not in run.call_args.kwargs, "Both experiments use the shared default manifest"
@@ -301,6 +319,10 @@ def main():
             assert len(observations) == (8 if kind == "runtime" else 8 * (len(VARIANTS) + 3))
             assert all(row["status"] == "ok" and row["pruning_seconds"] > 0 for row in observations), observations
             assert all(row["process_seconds"] >= row["pruning_seconds"] for row in observations)
+            for row in observations:
+                assert len(row["epsilon"]) == 2
+                position = row["command"].index("--epsilon-vector")
+                assert list(map(float, row["command"][position + 1:position + 3])) == row["epsilon"]
             config = json.loads((output / "run.json").read_text())["configuration"]
             assert all(row["pruning_sha256"] == config["pruning_sha256"] for row in observations)
             assert {row["family"] for row in observations} == {"immuno", "torus_gauss"}

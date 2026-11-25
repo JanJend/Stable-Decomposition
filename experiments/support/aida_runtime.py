@@ -82,7 +82,8 @@ def main():
                 epsilons = []
                 before, before_status, before_wall, before_error = {}, "skipped", "", "Missing module bounds"
             else:
-                epsilons = [float(info["bbox_extent"]) * p / 100 for p in percentages]
+                epsilons = [",".join(str((info[f"bbox_max_{axis}"] - info[f"bbox_min_{axis}"]) * p / 100)
+                                     for axis in ("x", "y")) for p in percentages]
                 before, before_status, before_wall, before_error = run_worker(
                     worker, ["components", scc, *epsilons], args.aida_timeout)
             for index, percentage in enumerate(percentages):
@@ -104,7 +105,7 @@ def main():
                                    components_before_gt_2epsilon=before["components"] - before["short_2epsilon"][index],
                                    aida_input_seconds=before["aida_seconds"],
                                    lifetime_classification_seconds=before["classification_seconds"])
-                    print(f"  Starting {percentage:g}% pruning (epsilon={epsilon:.8g}, deadline={args.pruning_timeout:g}s)", flush=True)
+                    print(f"  Starting {percentage:g}% pruning (epsilon=({epsilon}), deadline={args.pruning_timeout:g}s)", flush=True)
                     with tempfile.TemporaryDirectory(prefix="pruning-experiment-") as temporary:
                         output = Path(temporary) / "pruned.scc"
                         pruning, status, wall, error = run_worker(worker, ["prune", scc, epsilon, output], args.pruning_timeout)

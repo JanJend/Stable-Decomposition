@@ -3,3 +3,27 @@ build/
 .vscode
 .cache
 /explanations/
+
+# Generated datasets, plots, benchmark reports, and scratch files.
+/experiments/data/
+/experiments/results/
+/results/
+/output/
+/tmp/
+/pruning-cli-fixtures/
+hilbert_functions/
+__pycache__/
+*.py[cod]
+
+# CLI and historical algebra outputs written alongside input presentations.
+*_pru*.scc
+*_min.scc
+*_resolution.scc
+*.sccsum
+*_input_hilbert.png
+*_output_hilbert.png
+*_decomposition_comparison.txt
+*_pruning_comparison.txt
+
+# Keep the hand-checked pruning solutions available as regression fixtures.
+!/test_presentations/tests_with_solutions/*.scc

@@ -16,11 +16,17 @@ double seconds(Clock::time_point start) {
     return std::chrono::duration<double>(Clock::now() - start).count();
 }
 
-double parse_epsilon(const char* text) {
+sd::Epsilon parse_epsilon(const char* text) {
     std::size_t used = 0;
     const std::string value(text);
-    const double epsilon = std::stod(value, &used);
-    if (used != value.size()) throw std::invalid_argument("Invalid epsilon");
+    const double x = std::stod(value, &used);
+    sd::Epsilon epsilon{x, x};
+    if (used != value.size()) {
+        if (value[used] != ',') throw std::invalid_argument("Invalid epsilon");
+        const auto tail = value.substr(used + 1);
+        epsilon[1] = std::stod(tail, &used);
+        if (used != tail.size()) throw std::invalid_argument("Invalid epsilon");
+    }
     (void)sd::pruning_shift(epsilon);
     return epsilon;
 }
@@ -52,7 +58,7 @@ int main(int argc, char** argv) {
                    << ",\"thickness_seconds\":" << seconds(start) << "}\n";
         } else if (mode == "prune" && argc == 5) {
             sd::Module input(argv[2], true);
-            const double epsilon = parse_epsilon(argv[3]);
+            const auto epsilon = parse_epsilon(argv[3]);
             sd::PruningProfile profile;
             const auto start = Clock::now();
             const auto result = sd::pruning(std::move(input), epsilon, false, &profile);
@@ -79,15 +85,18 @@ int main(int argc, char** argv) {
             if (input.num_of_gens()) decomposer(input.presentation(), blocks);
             const double elapsed = seconds(start);
             // Classify lifetimes separately from decomposition timing. A component
-            // has diagonal lifespan <= t iff its canonical shift by t is zero.
+            // dies at a vector shift iff the corresponding shifted image is zero.
             const auto classification_start = Clock::now();
             std::vector<std::size_t> short_epsilon(argc - 3), short_twice(argc - 3);
             for (const auto& block : blocks) {
                 auto summand = std::make_shared<const Module>(static_cast<const Matrix&>(block));
                 for (int i = 3; i < argc; ++i) {
-                    const double epsilon = parse_epsilon(argv[i]);
-                    short_epsilon[i - 3] += graded_linalg::epsilon_image<Matrix>(summand, epsilon).is_zero();
-                    short_twice[i - 3] += graded_linalg::epsilon_image<Matrix>(summand, 2 * epsilon).is_zero();
+                    const auto epsilon = parse_epsilon(argv[i]);
+                    auto image = graded_linalg::Submodule<Matrix>::whole(summand);
+                    image.shift_generators(epsilon);
+                    short_epsilon[i - 3] += image.is_zero();
+                    image.shift_generators(epsilon);
+                    short_twice[i - 3] += image.is_zero();
                 }
             }
             report << "RESULT {\"components\":" << blocks.size()

@@ -11,7 +11,7 @@ namespace stable_decomposition {
 using namespace graded_linalg;
 namespace {
 
-std::pair<Mat, Mat> pruning_pair_profiled(Mat &M, const double epsilon, const bool quick, PruningProfile* profile) {
+std::pair<Mat, Mat> pruning_pair_profiled(Mat &M, const Epsilon& epsilon, const bool quick, PruningProfile* profile) {
   // In this function, matrices either represent presentations of modules (relations -> generators),
   // or generators of a submodule (generators of submodule -> generators of module).
   // Therefore, matrices representing submodules only make sense w.r.t. an ambient module,
@@ -204,7 +204,7 @@ std::pair<Mat, Mat> pruning_pair_profiled(Mat &M, const double epsilon, const bo
 
 } // namespace
 
-Mat pruning_profiled(Mat &M, const double epsilon, bool quick, PruningProfile* profile) {
+Mat pruning_profiled(Mat &M, const Epsilon& epsilon, bool quick, PruningProfile* profile) {
   if (profile) *profile = {};
   PruningTimer total(profile ? &profile->total : nullptr);
   auto [I, K] = pruning_pair_profiled(M, epsilon, quick, profile);         // generators for I ⊆ M and K ⊆ M
@@ -217,8 +217,14 @@ Mat pruning_profiled(Mat &M, const double epsilon, bool quick, PruningProfile* p
     Pru_M.column_reduction_graded_w_deletion();
     Pru_M.minimize();
   });
-  Pru_M.shift({-epsilon, -epsilon});
+  Pru_M.shift({-epsilon[0], -epsilon[1]});
   return Pru_M;
 }
 
+} // namespace stable_decomposition
+
+namespace stable_decomposition {
+Mat pruning_profiled(Mat& M, double epsilon, bool quick, PruningProfile* profile) {
+    return pruning_profiled(M, Epsilon{epsilon, epsilon}, quick, profile);
+}
 } // namespace stable_decomposition

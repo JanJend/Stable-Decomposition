@@ -14,8 +14,13 @@ ProgramOptions parse_arguments(int argc, char** argv) {
     CLI::App app{"Prune a two-parameter persistence module: SCC input -> SCC output."};
     app.set_version_flag("-v,--version", "Stable-Decomposition " PRUNING_VERSION);
     app.add_option("input", opts.input_file, "Input SCC presentation or projective resolution")->required();
-    app.add_option("-e,--epsilon,--delta", opts.epsilon,
-                   "Nonnegative epsilon (default: 1% of degree extent; fallback 0.01)");
+    auto* scalar = app.add_option("-e,--epsilon,--delta", opts.epsilon,
+                   "Absolute diagonal epsilon: use E in both coordinates");
+    auto* percent = app.add_option("--epsilon-percent", opts.epsilon_percent,
+                   "Percentage of each generator/relation bounding-box side (default: 1)")->excludes(scalar);
+    std::vector<double> epsilon_vector;
+    app.add_option("--epsilon-vector", epsilon_vector, "Absolute epsilon coordinates: X Y")
+        ->expected(2)->excludes(scalar)->excludes(percent);
     app.add_option("-o,--output", opts.output_file, "Output SCC path (default: <input>_pru<epsilon>.scc)");
     app.add_flag("--hilbert", opts.hilbert, "Save input/output Hilbert PNGs with shared axes and colour scale");
     app.add_flag("--aida", opts.aida, "Decompose input/output with AIDA; save decompositions and comparison");
@@ -25,13 +30,16 @@ ProgramOptions parse_arguments(int argc, char** argv) {
     app.add_flag("--quick", opts.quick, "Use the original matrix algorithm's quick mode (requires --old)")->needs(old);
     app.add_flag("--profile", opts.profile, "Print module pruning operation timings")
         ->excludes(old)->excludes(compare);
+    app.add_option("--threads", opts.pruning_options.threads,
+                   "Module: total computation workers for I/K and adaptive preparation (default: available CPU cores; fallback: 1)")
+        ->check(CLI::PositiveNumber)->excludes(old)->excludes(compare);
     app.add_flag("--projected-preimages,!--no-projected-preimages", opts.pruning_options.projected_preimages,
                  "Module: track only needed kernel coordinates (default: on)")->excludes(old)->excludes(compare);
     app.add_flag("--composition-generators,!--no-composition-generators", opts.pruning_options.composition_generators,
                  "Module: use certified composition generators of the Hom quotient (default: on)")->excludes(old)->excludes(compare);
-    app.add_flag("--sparse-nilpotent-generators,!--no-sparse-nilpotent-generators",
-                 opts.pruning_options.composition_budget.sparse_nilpotent,
-                 "Module: nilpotent actions and small sparse seeds (default: on)")->excludes(old)->excludes(compare);
+    app.add_flag("--nilpotent-reduction,!--no-nilpotent-reduction",
+                 opts.pruning_options.composition_budget.nilpotent_reduction,
+                 "Module: nilpotent actions and small seeds (default: on)")->excludes(old)->excludes(compare);
     app.add_flag("--complement-orbit-generators,!--no-complement-orbit-generators",
                  opts.pruning_options.composition_budget.complement_orbit,
                  "Module: orbit compression of sums of remaining basis maps (default: on)")->excludes(old)->excludes(compare);
@@ -53,9 +61,19 @@ ProgramOptions parse_arguments(int argc, char** argv) {
     app.add_flag("--adaptive-restriction,!--no-adaptive-restriction", opts.pruning_options.adaptive_restriction,
                  "Module: remove dependent restrictions in each I/K pass (default: on)")->excludes(old)->excludes(compare);
     app.add_flag("--reuse-target-reductions,!--no-reuse-target-reductions", opts.pruning_options.reuse_target_reductions,
-                 "Module: reduce the fixed I-pass target generators once (default: on)")->excludes(old)->excludes(compare);
+                 "Module: reduce I target generators once per target (default: on)")->excludes(old)->excludes(compare);
+    app.add_flag("--single-solve-quotient,!--no-single-solve-quotient", opts.pruning_options.single_solve_quotient,
+                 "Module: compute the Hom quotient in one A-1/2 solve (default: on)")->excludes(old)->excludes(compare);
+    app.add_flag("--update-i-target,!--no-update-i-target", opts.pruning_options.update_i_target,
+                 "Module: fast I, refresh the shift image of I before each map (default: off, fixed per pass)")->excludes(old)->excludes(compare);
+    app.add_flag("--parallel-i", opts.pruning_options.parallel_i,
+                 "Module: fix J per pass and process groups of I constraints concurrently")->excludes(old)->excludes(compare);
+    app.add_flag("--parallel-k", opts.pruning_options.parallel_k,
+                 "Module: compute and sum groups of K images concurrently")->excludes(old)->excludes(compare);
+    app.add_flag("--minimize-i-target", opts.pruning_options.minimize_i_target,
+                 "Module: separately minimize J before solving (comparison control; default: off)")->excludes(old)->excludes(compare);
     bool all_optimizations = false;
-    app.add_flag("--all-optimizations", all_optimizations, "Module: enable all optional optimizations and the Hom quotient (already the default); keep the selected Hom algorithm and search budgets")
+    app.add_flag("--all-optimizations", all_optimizations, "Module: enable all optional optimizations, including fast I, and the Hom quotient; keep the selected Hom algorithm and search budgets")
         ->excludes(old)->excludes(compare);
     app.add_option("--image-size", opts.image_size, "Hilbert heatmap size in pixels (default: 500)")
         ->check(CLI::Range(128, 2048));
@@ -77,6 +95,12 @@ ProgramOptions parse_arguments(int argc, char** argv) {
     }
     if (opts.epsilon && (!std::isfinite(*opts.epsilon) || *opts.epsilon < 0 || !std::isfinite(2 * *opts.epsilon)))
         throw std::invalid_argument("epsilon and 2*epsilon must be finite and nonnegative");
+    if (opts.epsilon_percent && (!std::isfinite(*opts.epsilon_percent) || *opts.epsilon_percent < 0))
+        throw std::invalid_argument("epsilon percentage must be finite and nonnegative");
+    if (!epsilon_vector.empty()) {
+        opts.epsilon_vector = stable_decomposition::Epsilon{epsilon_vector[0], epsilon_vector[1]};
+        (void)stable_decomposition::pruning_shift(*opts.epsilon_vector);
+    }
     using graded_linalg::HomAlgorithm;
     opts.pruning_options.hom_algorithm = hom_algorithm == "full-restriction" ? HomAlgorithm::full_restriction
         : hom_algorithm == "hom-exactness" ? HomAlgorithm::hom_exactness : HomAlgorithm::optimised;
@@ -84,9 +108,12 @@ ProgramOptions parse_arguments(int argc, char** argv) {
         auto& options = opts.pruning_options;
         options.projected_preimages = options.composition_generators = options.amortize_reductions = true;
         options.adaptive_restriction = options.reuse_target_reductions = true;
-        options.composition_budget.sparse_nilpotent = options.composition_budget.complement_orbit = true;
+        options.single_solve_quotient = true;
+        options.update_i_target = true;
+        options.composition_budget.nilpotent_reduction = options.composition_budget.complement_orbit = true;
         options.full_end_space = false;
     }
+    if (opts.pruning_options.parallel_i) opts.pruning_options.update_i_target = false;
     return opts;
 }
 
@@ -97,4 +124,12 @@ std::string generate_output_path(const std::string& input, double epsilon) {
     
     std::string new_name = p.stem().string() + suffix.str() + ".scc";
     return (p.parent_path() / new_name).string();
+}
+
+std::string generate_output_path(const std::string& input, const stable_decomposition::Epsilon& epsilon) {
+    if (epsilon[0] == epsilon[1]) return generate_output_path(input, epsilon[0]);
+    const std::filesystem::path p(input);
+    std::ostringstream suffix;
+    suffix << "_pru" << std::fixed << std::setprecision(4) << epsilon[0] << '_' << epsilon[1];
+    return (p.parent_path() / (p.stem().string() + suffix.str() + ".scc")).string();
 }

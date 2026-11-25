@@ -32,17 +32,21 @@ def column_storage(pruning):
 
 
 def execute(pruning, scc, epsilon, variant, timeout, memory_mb, expected_storage=None, composition_options=None):
-    # CLI defaults are fully optimized. Explicitly disable the other options for
-    # one-at-a-time comparisons, keeping the unconditional improvements active.
+    # Explicitly select optional improvements for one-at-a-time comparisons,
+    # keeping the unconditional improvements active.
     enabled = set(SWITCHES) - {"full-end-space"} if variant == "all-optimizations" else (
-        {"sparse-nilpotent-generators", "complement-orbit-generators"} if composition_options is not None else {variant})
+        {"nilpotent-reduction", "complement-orbit-generators"} if composition_options is not None else {variant})
     flags = ["--no-" + name for name in SWITCHES if name != "full-end-space" and name not in enabled]
+    if "update-i-target" in enabled:
+        flags.append("--update-i-target")
     if composition_options is not None:
         flags.extend(generator_flags(composition_options))
     if variant == "full-end-space":
         flags.append("--full-end-space")
     flags.append("--hom-algorithm=optimised")
-    command = [str(pruning), str(scc), "--epsilon", repr(epsilon), "--profile", "--no-output",
+    epsilon_flags = (["--epsilon-vector", *(repr(value) for value in epsilon)]
+                     if isinstance(epsilon, (tuple, list)) else ["--epsilon", repr(epsilon)])
+    command = [str(pruning), str(scc), *epsilon_flags, "--profile", "--no-output",
                "--memory-limit-mb", str(memory_mb), *flags]
     start = time.monotonic()
     with tempfile.TemporaryFile(mode="w+b") as log:
@@ -151,7 +155,7 @@ def main(kind, *, points, epsilon_percents, repeats=3, timeout=600, memory_mb=12
                              "\nFinish or rerun experiments/generate_data.py, then rerun this benchmark. "
                              "Existing results are preserved.")
         variants = ["all-optimizations"] if kind == "runtime" else [*VARIANTS, *generator_configs]
-        config = dict(kind=kind, manifest=str(manifest), manifest_sha256=digest(manifest),
+        config = dict(epsilon_scaling="per-axis-bounding-box", kind=kind, manifest=str(manifest), manifest_sha256=digest(manifest),
                       pruning=str(pruning), pruning_sha256=binary_hash, column_storage=storage,
                       epsilon_percents=percentages, repeats=repeats, repeat_below=repeat_below,
                       timeout=timeout, memory_mb=memory_mb, points=points, variants=variants,
@@ -206,12 +210,12 @@ def main(kind, *, points, epsilon_percents, repeats=3, timeout=600, memory_mb=12
                         if digest(scc) != sample["scc_sha256"]:
                             raise SystemExit(f"Input changed during the benchmark: {scc}. "
                                              "Existing results are preserved. Finish generating inputs, then rerun.")
-                        generators, relations, extent = presentation_info(scc)
+                        generators, relations, sides = presentation_info(scc, per_axis=True)
                         base.update(generators=generators, relations=relations)
                     for percentage in percentages:
                         base["epsilon_percent"] = percentage
                         if generated:
-                            base["epsilon"] = extent * percentage / 100
+                            base["epsilon"] = tuple(side * (percentage / 100) for side in sides)
                         for repetition in range(repeats):
                             sequence = list(variants)
                             order.shuffle(sequence)

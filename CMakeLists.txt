@@ -107,6 +107,10 @@ target_link_libraries(pruning PRIVATE pruning_cli)
 add_executable(pruning_optimization_worker EXCLUDE_FROM_ALL experiments/support/optimization_runtime.cpp)
 target_link_libraries(pruning_optimization_worker PRIVATE stable_pruning)
 
+# Torus runtime trace through the same pruning entry point as the CLI.
+add_executable(pruning_torus_runtime EXCLUDE_FROM_ALL experiments/support/torus_runtime.cpp)
+target_link_libraries(pruning_torus_runtime PRIVATE stable_pruning)
+
 # Render input Hilbert functions without pruning or materializing the full induced grid.
 add_executable(experiment_hilbert EXCLUDE_FROM_ALL experiments/support/plot_input.cpp)
 if(APPLE)
@@ -117,6 +121,14 @@ endif()
 # Standalone Hom-reduction size/timing experiment (source kept at the repo root).
 add_executable(hom_reduction_benchmark EXCLUDE_FROM_ALL hom_reduction_benchmark.cpp)
 target_link_libraries(hom_reduction_benchmark PRIVATE stable_pruning)
+
+# Explicit quotient-only diagnostic; large inputs are never run by CTest.
+add_executable(end_quotient_dimensions EXCLUDE_FROM_ALL tests/end_quotient_dimensions.cpp)
+target_link_libraries(end_quotient_dimensions PRIVATE stable_pruning)
+
+# Fresh-process comparison of explicit and single-solve End_d_0 quotients.
+add_executable(end_quotient_benchmark EXCLUDE_FROM_ALL experiments/support/end_quotient_runtime.cpp)
+target_link_libraries(end_quotient_benchmark PRIVATE stable_pruning)
 
 # Tests (optional)
 include(CTest)

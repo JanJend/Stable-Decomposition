@@ -1,377 +1,438 @@
-# Research experiments
+# Experiments
 
-Run either experiment from the repository root, with **no arguments**:
+## Run
 
-```sh
-python3 experiments/benchmark_runtime.py
-python3 experiments/benchmark_optimizations.py
-```
+Run commands from the repository root. Requirements:
 
-Both experiments read **`data/manifest.csv`** and reuse the same point sets and
-presentations. If the shared manifest is absent, either script runs
-`generate_data.py` once to prepare both size ranges. The runtime experiment uses
-20, 40, 80, 160, 320, 640, 1280 and 2560 points, plus both complete large hypoxic
-regions. The optimization comparison selects only Gaussian-noise tori,
-Gaussian clusters and immune inputs at **80, 160 and 320 points**.
-This restriction is defined in `benchmark_optimizations.py`; generation and
-the shared point-set/presentation collection keep all families and sizes.
-For observed clouds, each experiment selects distinct complete samples nearest
-its target sizes; large hypoxic regions are added to the runtime experiment
-without adding huge synthetic inputs or baseline optimization runs.
+- Python 3.9+ and NumPy (`python3 -m pip install numpy`).
+- CMake 3.28+, a C++17 compiler and Boost (timer, graph, chrono).
+- Sibling checkouts: `../Persistence-Algebra`, `../AIDA` and
+  `../function_delaunay` (with CGAL, Eigen and GUDHI installed).
+- For immune inputs, the sibling
+  [SpatialPatterningOfImmuneCells](https://github.com/MultiparameterTDAHistology/SpatialPatterningOfImmuneCells)
+  checkout containing `1.5mmRegions/`, `LargeHypoxicRegion.csv` and
+  `LargeHypoxicRegion2.csv`.
 
-The runtime experiment enables all optimizations. The optimization experiment
-compares the quotient-based baseline with each optional improvement separately
-and with a full-End control. Dense and Hom algorithm comparisons are excluded.
-The CLI and every benchmark configuration use A-1/2 (`optimised`) by default.
-Runtime sweeps **1%, 2%, 4%, 8%** of each presentation's largest degree extent;
-the optimization comparison uses only **1% and 8%**.
-Settings are at the top of the benchmark scripts. Run the scripts one at a time
-so their timings do not compete.
-
-Finish data generation before starting a benchmark. The generator and benchmark
-lock the shared inputs so regeneration cannot overwrite presentations during a
-run. Every selected presentation is checked against the manifest before timing
-starts. If inputs have changed since a previous run, rerunning creates a new
-results directory and preserves the previous observations.
-
-Results go to `results/runtime/` and `results/optimizations/`. Each contains
-`table.csv` and `table.tex`, updated after every measurement; the optimization
-experiment also writes `speedups.csv` and `speedups.tex`. Rerunning resumes a
-matching interrupted experiment or regenerates completed tables. Changed code,
-inputs or settings use a timestamped result directory, preserving earlier
-measurements. Ctrl-C keeps completed observations.
-
-## Generator-budget sweep
-
-The optimization experiment also compares both composition methods together at
-**3, 6, and 12 orbit attempts**, using hybrid seeds. Other optional optimizations
-are off for these comparisons, matching the quotient-based baseline. The
-one-at-a-time columns continue to use the production defaults.
-
-```sh
-python3 experiments/benchmark_optimizations.py \
-  --composition-orbit-rounds 3 6 12 24 \
-  --composition-orbit-seed-mode sum random hybrid \
-  --composition-orbit-min-gain 1 --composition-orbit-patience 3
-```
-
-The round and seed-mode lists form a Cartesian product. `sum` uses all remaining
-nonpivot maps, `random` includes each independently with probability one half,
-and `hybrid` alternates these, starting with a sum. The same fixed random seed
-(default 923407, set with `--composition-orbit-random-seed`) is reused across
-repetitions. Patience counts consecutive attempts with zero savings or savings
-below the minimum; zero patience disables early stopping. Every count is a
-maximum, so runs can stop earlier. Zero rounds disables the orbit stage.
-
-The default `--composition-orbit-pair-visits 0` automatically scales the total
-allowance with the number of rounds and the End dimension. A positive value
-imposes a separate cap. `--composition-sparse-seeds`,
-`--composition-nilpotent-rounds`, and the remaining search budgets are also
-configurable (`--help` lists all of them). Values other than the round/mode lists
-apply to every sweep configuration.
-
-`generators.csv` and `generators.tex` report selected I/K map counts, full pruning
-times and baseline-relative speedups for each configuration. Complete settings,
-commands and failures are saved with the observations. Changing any sweep
-setting creates a new results directory; rerunning the same setting resumes it.
-
-## Hom-size experiment
-
-```sh
-cmake --build build/local-release --target hom_reduction_benchmark
-python3 experiments/benchmark_end_sizes.py
-```
-
-It uses `data/presentations/torus_gauss/torus_gauss_640_1_H1.scc` (640 points,
-sample 1, RNG seed 42) with epsilon values **1%, 2%, 4%, 8%** of the largest
-degree extent over generators and relations. Pass `--percentages 0.5 1 2 4`
-to choose another sweep. Each epsilon runs in a separate process with a
-10-minute (600-second) deadline and 12288 MiB sampled peak-RSS limit; both are
-configurable. This experiment measures the global map families; it does not run
-the adaptive I/K pruning iterations.
-
-`results/End_sizes/results.csv` has **27 columns**: pointset and epsilon; serialized generator settings;
-full Hom and quotient dimensions; I/K counts for **Sparse-nilpotent**,
-**Complement-orbit**, and **Combined** in both spaces; the three basis/quotient
-times; two shared coordinate-setup times; and six method times. Each method
-time combines I and K and excludes the separately reported coordinate setup.
-Combined runs Sparse-nilpotent first, then extends its certificate with
-Complement-orbit; it never increases the sparse method's output count.
-
-Both methods are enabled by default. Use `--no-sparse-nilpotent-generators` or
-`--no-complement-orbit-generators` to measure only the other method. Disabled
-method and Combined cells say `disabled`; they are not reported as zero time or
-zero generators. The same switches work on `hom_reduction_benchmark` and the
-main pruning CLI. `--no-composition-generators` remains the pruning CLI's master
-switch. The one-at-a-time optimization benchmark also has separate Sparse and
-Orbit columns. All `--composition-*` search controls are forwarded to the worker,
-and the CSV and JSON record their values.
-
-Failed runs retain completed measurements and mark unfinished cells `timeout`,
-`memory_limit`, or `error`. Each run appends CSV rows and saves stdout/stderr
-logs, detailed per-epsilon JSON records (including the selected methods), and
-settings in a timestamped subfolder. An older CSV with a different layout is
-preserved there as `previous_results.csv`. Run
-`python3 -m experiments.support.check_end_sizes` for a small end-to-end check.
-
-## Directory layout
-
-```text
-experiments/
-  generate_data.py            Prepare shared inputs for both experiments
-  plot_pointsets.py           Plot clouds and input Hilbert functions once
-  benchmark_runtime.py        Runtime experiment
-  benchmark_optimizations.py  Individual optimization comparison
-  data/
-    manifest.csv              Shared metadata; paths relative to data/
-    point-sets/<family>/      One file per cloud, shared across homology degrees
-    presentations/<family>/  Minimal presentations, with Hk suffixes
-    pictures/                 Shared PNGs, index.csv and index.html
-  results/
-    runtime/                  Runtime tables and observations
-    optimizations/            Optimization tables and observations
-  support/                    Shared implementation and optional checks
-```
-
-## Build and prerequisites
-
-Use Python 3.9 or newer, NumPy and Matplotlib for data generation and plotting.
-Timing and reporting use the standard library. Build the pruning executable and
-Hilbert renderer separately; the benchmark scripts never compile code:
+Build once:
 
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DGRLINA_USE_COMPACT_COLUMNS=ON
-cmake --build build --target pruning experiment_hilbert --config Release -j 2
-```
-
-On Apple Silicon, add `-DCMAKE_PREFIX_PATH=/opt/homebrew` if needed. Sibling
-Persistence-Algebra and AIDA checkouts supply the normal project dependencies.
-Build function-Delaunay in its sibling checkout for module generation:
-
-```sh
+cmake --build build --target pruning hom_reduction_benchmark -j 2
 cmake -S ../function_delaunay -B ../function_delaunay/build -DCMAKE_BUILD_TYPE=Release
 cmake --build ../function_delaunay/build --target main -j 2
 ```
 
-Observed immune-cell inputs come from the sibling
-[SpatialPatterningOfImmuneCells](https://github.com/MultiparameterTDAHistology/SpatialPatterningOfImmuneCells)
-checkout: its `1.5mmRegions/` folder and root-level `LargeHypoxicRegion.csv` and
-`LargeHypoxicRegion2.csv`. Pass `--immune-repo PATH` for another location.
+On Apple Silicon, add `-DCMAKE_PREFIX_PATH=/opt/homebrew` to the configure
+commands if dependencies are not found.
 
-## Prepare the datasets
+Prepare the shared inputs, then run the experiments one at a time:
 
 ```sh
 python3 experiments/generate_data.py
+python3 experiments/benchmark_runtime.py
+python3 experiments/benchmark_optimizations.py
+python3 experiments/benchmark_end_sizes.py --worker build/hom_reduction_benchmark
+python3 experiments/end_quotient_size.py --worker build/hom_reduction_benchmark
 ```
 
-Every synthetic family uses the same default doubling sequence starting at 20:
-**20, 40, 80, 160, 320, 640, 1280, 2560**.
-Every synthetic family/size/seed is a deterministic sample. Default RNG seeds
-42, 43 and 44 are labelled samples 1, 2 and 3. For example, `S2_80_1.txt` has
-presentation `S2_80_1_H2.scc`. Manifests record `seed` and `rng_seed` separately;
-`--seeds` specifies actual RNG seeds. Sample numbers remain stable when
-regenerating a subset. `--seed 42` remains an alias for `--seeds 42`.
-
-| Family | Sampling | Default homology |
-| --- | --- | --- |
-| `torus_gauss` | Area-uniform torus in R3, major radius 2, minor radius 1; Gaussian sigma 0.27 and 3% clipped Cauchy outliers | H1 |
-| `torus_uni` | Same mixed noise, plus replacement of 10% of points by uniform noise in [-3,3]^2 × [-1,1] | H1 |
-| `gauss_clust` | Three Gaussian clusters in R3; independently jittered centers, weights 0.4/0.35/0.25, standard deviations 0.6/0.8/0.5, plus 5% clipped Cauchy outliers | H0 |
-| `S2` | Uniform unit 2-sphere in R3, with the same Gaussian noise mixture and 5% clipped Cauchy outliers as clusters | H2 |
-| `immuno` | Complete observed small clouds plus both complete large hypoxic regions | H1 |
-
-The torus parameters and noise follow `../mpm_generation/noisy_torus.py`:
-Gaussian perturbations on all points and random-direction Cauchy displacements
-on outliers, with scale 0.6 and distances clipped to ±1.8. At least one outlier
-is used in small samples. Clusters use the same displacement model with scale 2
-and distances clipped to ±6; their per-coordinate variances are four times the
-previous values. The `S2` family replaces the former S3 in R4.
-
-Cluster centers are proposed with independent Gaussian jitter of standard deviation
-0.75 per coordinate. Proposals are rejected unless every pair of centers is at
-least 3 × (sigma_i + sigma_j) apart, keeping their three-sigma core balls disjoint.
-Locations vary with the RNG seed and point count while remaining reproducible;
-the three within-cluster standard deviations stay distinct. Gaussian tails and
-explicit outliers may still extend beyond those core balls.
-
-Clusters and S2 share the same noise code: Gaussian standard deviations
-0.6/0.8/0.5 with weights 0.4/0.35/0.25, followed by 5% Cauchy outlier shifts
-with scale 2 and distances clipped to ±6. On S2, each point independently selects
-a Gaussian component; on clusters, the component also determines its center.
-
-The cluster and S2 outlier count is max(1, floor(0.05n)): 1, 2, 4, 8, 16, 32, 64 and
-128 for the default sizes. These are points selected for Cauchy displacements;
-the displacements can be small, so not every selected point appears isolated.
-
-Small real samples are selected from all cell-type subfolders by relative size
-difference. Both large CSVs combine **all CD8, CD68 and FoxP3 cells**; no cell-type
-filter or subsampling is applied. They contain 15,724 and 21,124 points,
-respectively. CSV headers are excluded and coincident coordinates are removed.
-Actual counts and source filenames are retained in the manifest.
-
-Every family uses the **sublevel Delaunay–Čech bifiltration**: minimum enclosing
-ball radius (not squared radius), and maximum vertex codensity on each simplex.
-Coordinates are translated and isotropically scaled by their largest range L.
-The vertex function is negative Gaussian KDE, min–max normalized to [-1,0], so
-higher-density points enter first:
-
-```text
-q = (points - coordinate_minima) / L
-D_i = (1/n) * sum_j exp(-||q_i-q_j||^2 / (2*h^2))
-f_i = -(D_i-min(D)) / (max(D)-min(D))
-```
-
-Bandwidths are selected or specified in explicit spatial units:
-
-- Tori: **selected separately for each cloud by leave-one-out Gaussian likelihood**,
-  from 25 logarithmically spaced widths between 0.1 and 2.0 in original units.
-  Larger samples generally select narrower kernels. The selected width is divided
-  by L for the scaled cloud. Tori use H1 only.
-- Clusters and S2: **0.2 in original units** (`add_kde.py`), so h = 0.2/L.
-- Immune cells: **0.05 in scaled coordinates** (`w_multipers.py`). This uses
-  the common isotropic spatial normalization here, rather than independently
-  scaling x and y as that older script does.
-
-For torus selection, each point is scored using the other n−1 points and the
-proper Gaussian normalization, including the bandwidth-dependent factor h^(-3).
-The mean log density selects the width; the final codensity still uses raw KDE
-min–max normalized to [-1,0]. The manifest records `kde_bandwidth_method` and
-`kde_bandwidth_loo_score`, alongside the actual selected scaled width.
-The search is exact and blockwise, with O(25n²) time and O(128n) memory.
-Scaling both distances and bandwidth by 1/L preserves Gaussian kernel weights.
-
-`--bandwidth VALUE` overrides automatic selection or the fixed family value
-in the units above. The final KDE includes self-contributions and outliers;
-the common Gaussian normalization factor cancels under min–max normalization.
-A constant D gives f=0. KDE is exact and blockwise, using O(n²) time and O(128n)
-memory, including for the large observed clouds. The manifest records the
-actual scaled `kde_bandwidth`; multiply by `spatial_scale` for original units.
-
-Use `--families torus_gauss`, `--sizes 20 40`, or `--homology 1` to prepare a
-subset. Immune generation always includes both large regions. Matching
-successful presentations are reused; `--force` regenerates them. The generation
-deadline is 1200 seconds per presentation, with partial failed SCCs removed.
-Source paths, sizes, seeds, normalization, generation statuses/timings and SHA256
-hashes are recorded in the shared manifest. `--output-dir` supports isolated
-checks without creating another experiment-specific data store.
-
-## Inspect the input modules
+To profile only the **1280-point Gaussian torus H1** (sample 1, RNG seed 42),
+using the runtime benchmark's all-optimizations path with larger torus search budgets:
 
 ```sh
-python3 experiments/plot_pointsets.py
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DGRLINA_USE_COMPACT_COLUMNS=ON
+cmake --build build --target pruning_torus_runtime -j 2
+python3 experiments/benchmark_torus_runtime.py
 ```
 
-Open [`data/pictures/index.html`](data/pictures/index.html) for the shared gallery
-of point sets and Hilbert functions before pruning. Images live under family
-subfolders: `NAME_points.png` for a cloud and `NAME_Hk.png` for its Hilbert
-function. A point set used in H1 and H2 is plotted once. Matching images are
-reused. `index.csv` records plot bounds, bandwidths and input hashes.
-
-Immune clouds are plotted in 2D. Clusters, tori and S2 use **3D plots**, with
-normalized KDE as colour and every point included. Use `--experiment runtime`
-or `--experiment optimizations` to render a subset into the same directory;
-the default gallery includes all shared inputs. `--data-dir PATH` supports an
-isolated generated bundle; `--hilbert-renderer PATH` selects another built
-renderer. `--self-check` exercises the 2D/3D/legacy-4D point renderer.
-
-Hilbert images show dim H_k(r,t) over F2 at 1000 × 700 coordinates, using the
-complete projective resolution, including syzygies. X is radius and Y is
-negative normalized KDE. White is zero; positive dimensions use logarithmic
-blue colours. Each image has its own radius extent and colour maximum. Very
-narrow features may fall between sample coordinates. Images belong to the
-input data and are shared across all epsilon values and optimization settings.
-
-## Measurement protocol
-
-- Runtime: `pruning INPUT --profile --no-output` uses all optimizations and Hom Algorithm A-1/2 by default.
-- Optimizations: Base uses the Hom quotient and Algorithm A-1/2 with all five
-  optional improvements explicitly disabled. Proj, Amort, Comp, Adaptive and
-  Reuse each enable only their named improvement. The Full End control instead
-  passes `--full-end-space`, computes the full End_(2 epsilon) basis without
-  quotienting by shifted End_0, and visits that basis in the I/K loops.
-  Its absolute time is labelled Full End; the percentage column is labelled
-  Quot and reports `100*(Full End/Base - 1)`, measuring how much faster the
-  quotient-based standard is. Other percentages use `100*(Base/Variant - 1)`.
-  Both timings include basis preparation and all pruning iterations.
-  Dense pivots, fused I preimages, deferred K image minimization and
-  percentage-based progress are unconditional and have no comparison columns.
-  Hom algorithm comparisons are excluded; every benchmark configuration uses
-  A-1/2. Use `--hom-algorithm=hom-exactness` outside the benchmark to select B.
-- Both experiments cover every selected size and epsilon. Compact storage is
-  held fixed across all configurations.
-- Primary time is the CLI's internal total pruning profile, including Hom
-  construction, map selection, iterations, progress formatting/writes and final
-  presentation/minimization. Input loading, process startup, profile printing
-  and SCC output are outside that timer. Complete process wall time is also
-  recorded. Pruned SCC output is disabled.
-- Epsilon is computed separately for each input and percentage from the largest
-  coordinate extent over all generator and relation degrees. Different epsilon
-  values are separate observations and table rows, never pooled into one median.
-- Runs are sequential; configuration order is shuffled with a fixed seed.
-  Individual seeds remain in `summary.csv` and `observations.jsonl`. Optimization
-  tables average the three per-seed median runtimes with equal weight; immune
-  rows use their single observed sample. Speedups are ratios of these mean
-  runtimes, not averages of percentages. A missing or failed seed never silently
-  drops out of a mean. Runtime tables retain separate rows for each seed.
-- Three timing observations are requested. If the first pruning time exceeds
-  five seconds, only that observation is used. Failed configurations are
-  attempted once. Medians, min/max, completed/attempted counts and partial
-  repeats are recorded.
-- Every process has a **600-second deadline**, including loading. A peak-RSS
-  watchdog samples every 200 ms and stops above **12288 MiB**. This is a sampled
-  guard, not a strict memory quota. Timeouts, memory stops, SIGKILL, generation
-  failures and algorithm errors are distinct statuses, never fabricated timings.
-- The module-pruning Hom constructor bypasses the old 100000-element conversion
-  cap; the benchmark's resource limits apply instead. No alternative
-  optimization configuration is substituted on failure.
-
-## Output files
-
-- `table.csv`: runtime matrix in seconds, or optimization mean runtimes with
-  one row per family, point count and epsilon percentage. Per-seed timing
-  medians receive equal weight; unequal repeat counts do not weight a seed more.
-- `table.tex`: optimization results use one compact, standard `table`/`tabular`
-  with point-set, size and epsilon columns, followed by the configuration times.
-  There are no seed or homology columns, landscape pages, page-size changes or
-  resizing. The complete optimization selection gives 18 rows. Runtime keeps
-  its detailed per-input tables and requires `longtable`.
-- `speedups.csv` and `speedups.tex`: optimization speedups from the mean runtimes.
-  Quot reports `100*(Full End/Base - 1)`; other columns report
-  `100*(Base/Variant - 1)`. A 2x speedup is +100%; a runtime twice the reference
-  is -50%. The zero Base column is omitted. The LaTeX output uses the same
-  compact layout and 18 averaged rows. CSVs retain full precision; LaTeX cells
-  show three significant digits. Pending cells are `--`, failed comparisons
-  are `n/a`, and `*` marks partial timing repeats. Per-seed failures and counts
-  remain in `summary.csv`. Runtime has no percentage comparison.
-- `summary.csv`: one row per input/epsilon/configuration, with medians, min/max,
-  sample counts and statuses.
-- `observations.jsonl`: every completed attempt, flushed immediately, with the
-  command, input/binary hashes, timings, iteration counts, status and limits.
-- `run.json` and `build-cache-compact.txt`: experiment settings, executable hash,
-  machine/Python/platform information and CMake configuration.
-
-## Validation
-
-After building `build/pruning`, run the small infrastructure check:
+This uses the production pruning entry point, including fast I, the direct
+single-solve quotient, compact columns and automatic worker detection. It
+reuses the manifest's presentation without generating inputs. Defaults are
+1%, 2%, 4% and 8% epsilon, one fresh process per epsilon, an 1800-second deadline
+and a 12288 MiB memory limit. For one measurement:
 
 ```sh
-python3 -m experiments.support.check_paper_benchmarks
+python3 experiments/benchmark_torus_runtime.py --percentages 1 --timeout 1800
 ```
 
-After building `experiment_hilbert` and function-Delaunay, check the data and
-plotting pipeline with:
+Use `--threads 1` for serial measurements or `--threads N` for a chosen worker
+budget; `--repeats N` retains each repetition separately. Add `--standard-i`
+to compare the fixed-per-pass I rule with fast I. Add `--parallel-i` to fix J
+per pass and process groups of homomorphisms concurrently, then intersect their
+results. With a 12-thread budget, I and K each receive 6 workers. A one-thread
+budget falls back to the serial fixed-target loop. J is formed without a separate
+generator minimization; `--minimize-i-target` restores that work for comparison.
+For separate archives of the three current variants:
 
 ```sh
-python3 -m experiments.support.check_data
+python3 experiments/benchmark_torus_runtime.py --percentages 1 --threads 12 --output-dir experiments/results/torus_i_fast
+python3 experiments/benchmark_torus_runtime.py --percentages 1 --threads 12 --standard-i --output-dir experiments/results/torus_i_fixed_serial
+python3 experiments/benchmark_torus_runtime.py --percentages 1 --threads 12 --parallel-i --output-dir experiments/results/torus_i_fixed_parallel
 ```
 
-This checks 3D samples, mixed outliers, exact KDE, automatic torus bandwidth
-selection and overrides, all immune cell types, shared input selection, H2,
-presentation reuse and picture output.
+The composition-search options
+from the other experiments are supported too. This torus experiment defaults
+to 262144 certificate visits and a 262144-unit nilpotent-reduction budget per
+side, shared by certificates and products. These are experiment-specific
+overrides; ordinary pruning uses 8192 for both options. To use the ordinary
+production budgets in this torus experiment:
 
-It checks no-argument entry points, explicit baseline and individual-option commands,
-multiple epsilons on small synthetic/real inputs, repeats, automatic resume,
-historical-result preservation, tables, timeouts, memory stops and LaTeX
-compilation when available. It does not run the full paper experiment.
-The separate `pruning_optimizations` CTest checks all 128 small-fixture switch
-combinations and exact output isomorphism.
+```sh
+python3 experiments/benchmark_torus_runtime.py --percentages 1 --composition-certificate-visits 8192 --composition-nilpotent-products 8192 --output-dir experiments/results/torus_runtime_1280_original_budget
+```
+
+The production path stores each map as one sparse coefficient column and lifts
+only the active map. Restriction selection processes batches of 32 maps using
+shared target reducers and one incremental independence reduction. Map order,
+selected indices and the algebraic stopping criteria are preserved. Fast I
+reuses its image and prepared target while I's embedded generators remain
+identical; a different representation conservatively triggers a refresh.
+
+Results are under
+`experiments/results/torus_runtime_1280/`:
+
+- `results.csv`: status, internal pruning time, process wall time, peak RSS,
+  map counts, iterations and output sizes for each epsilon/repetition.
+- `steps.csv`: every timed operation call, with start/end times, duration and
+  I/K pass number. Unfinished operations have blank durations. Pass 0 denotes
+  setup, finalization or an aggregate phase timer.
+- `timings.csv`: completed calls and summed durations by operation, plus
+  unfinished-call counts.
+- A timestamped archive contains these CSVs, settings, input/binary hashes,
+  build configuration, the completed output as `.output.scc`, full stderr and raw `.trace.tsv` start/end events,
+  flushed during execution. Completed steps survive a timeout or interruption.
+
+Setup dimensions, map counts and the peak RSS reached by setup are emitted
+before I/K begin, so these remain available if a later phase fails. On a failed
+run, recorded peak RSS is a lower bound on the process's eventual peak.
+
+The setup breakdown separates End_0, the direct Hom quotient and composition
+generator selection (including its coordinate setup). `map_lifts` records
+coefficient-family setup; temporary map lifting is included in I/K phases. I/K
+operations include restriction selection, target preparation, images,
+preimages, reductions and convergence checks.
+`i_shift` measures forming J without minimization; `i_target_reduce` measures
+the optional separate minimization. `i_intersection` measures merging the
+parallel workers' submodules. Parallel I operation totals sum durations across
+workers and can exceed the I phase's wall time. Loading/sorting is timed
+separately; pruning excludes input loading and SCC output, as in the runtime
+benchmark. Timings include trace overhead. `total` contains the other pruning
+stages, `basis` contains the End/quotient/composition breakdown, and I/K phases overlap when
+multiple workers are used; do not add nested or overlapping rows.
+
+Run the small regression check with
+`python3 -m experiments.support.check_torus_runtime`.
+
+To measure how many generators **I and K hold throughout pruning**, relative to
+the presentation of X:
+
+```sh
+cmake --build build --target pruning_torus_runtime -j 2
+python3 experiments/benchmark_generator_sizes.py
+```
+
+This reuses the production worker and the shared sample-1 Gaussian torus H1,
+Gaussian clusters H0 and complete immune H1 inputs at **640 and 1280 target
+points**. Actual observed point counts are retained (the 1280 immune input has
+1281 cells). Defaults are **0.5%, 1% and 2%** epsilon, the standard I rule,
+automatic workers, a 600-second deadline and a 12288 MiB memory limit per run.
+Use `--fast-i` to measure the fast I rule instead. Other examples:
+
+```sh
+python3 experiments/benchmark_generator_sizes.py --sizes 640 1280 2560 --percentages 1 2
+python3 experiments/benchmark_generator_sizes.py --families torus_gauss --sizes 1280 --timeout 1800
+python3 experiments/benchmark_generator_sizes.py --input test_presentations/test8.scc --percentages 10 --threads 1
+```
+
+Results are saved under `experiments/results/generator_sizes/`:
+
+- `results.csv`: input generators and relations, peak stored and peak reduced
+  I/K generator counts, final counts, iterations, runtime, status and ratios.
+  `i_peak_generators`/`k_peak_generators` include unreduced candidates;
+  `i_peak_reduced_generators`/`k_peak_reduced_generators` exclude them.
+- `generators.csv`: initial counts, each I update and K preimage before/after
+  minimization, pass endings and final counts. Separate J and L rows track
+  `J=eta(I)` and `L=eta(K)+sum f(K)`, including L's unreduced accumulation batches.
+  `map` is the 1-based index in the phase's full map family, before adaptive
+  restriction; 0 means no individual map. Pass 0 denotes initialization or the Q=0 shortcut.
+- Each count is divided by both `generators(X)` and
+  `presentation_size=generators(X)+relations(X)`. Zero denominators give blank
+  ratios. Counts are columns of the actual generating families, with no extra
+  minimizations or submodule presentations. The initial I uses the supplied
+  generators of X; internal kernel workspaces are not measured.
+- A timestamped archive retains settings, hashes, raw flushed traces, stderr
+  and CSVs. Timeouts/interruption preserve completed events; their peaks are
+  labelled lower bounds and missing counts stay blank. The algorithm, including
+  final quotient formation, runs in a fresh process for every input/epsilon.
+
+Run the small regression check with
+`python3 -m experiments.support.check_generator_sizes`.
+
+For the **0.5% generator-growth curves through 640 points**, rerun all six
+target sizes with a **one-hour deadline per input**:
+
+```sh
+python3 experiments/benchmark_generator_sizes.py --sizes 20 40 80 160 320 640 --percentages 0.5 --timeout 3600 --output-dir experiments/results/generator_sizes_to640_eps0p5_1h
+python experiments/plot_generator_sizes.py
+```
+
+Use a Python with Matplotlib for the second command. It saves a PNG, an SVG
+and `percentages.csv` beside the results. The three panels each show two curves:
+the peak reduced generator counts of I and K, divided by
+`generators(X)+relations(X)` and multiplied by 100. Both axes are logarithmic,
+and the x-axis uses actual point counts (including the 41-cell immune sample
+near target 40). The panels share their percentage scale; the dotted line
+marks 100%. Unfinished phases appear as lower-bound arrows, and zero values
+are explicitly noted rather than replaced by artificial positive values.
+Supply `--input PATH/results.csv` to plot an archived run. Check the plot with
+`python -m experiments.support.check_generator_size_plot`.
+
+To run the End-size benchmark only on one immune sample:
+
+```sh
+python3 experiments/benchmark_end_sizes.py --immuno-only 640
+python3 experiments/benchmark_end_sizes.py --immuno-only 1280
+```
+
+These select `T_E_ROI_40_locations_CD8` (640 cells) and
+`T_A_ROI_36_locations_CD8` (1281 cells), respectively, both in H1. They use
+0.5%, 1% and 2% epsilon and save counts and timings separately under
+`experiments/results/End_sizes_immuno_640/` or `End_sizes_immuno_1280/`.
+The existing `--immuno-640-only` spelling remains an alias for `--immuno-only 640`.
+
+For the three predetermined 640-point examples (Gaussian torus H1, Gaussian
+clusters H0 and immune H1), compute dimensions and left/right E-generators of Q
+without running the later pruning iterations:
+
+```sh
+python3 experiments/benchmark_end_sizes.py --640-only --generators-only
+```
+
+This writes `dimensions.tex`, `generators.tex` and their combined `results.tex`
+under `experiments/results/End_sizes_640/`, with CSV data, settings and archived
+logs. E is End_0; both generating families generate Q under its respective
+E-action. Their cardinalities are certified upper bounds, not minimum generator
+numbers. To select one or two of these inputs, add, for example,
+`--families torus_gauss gauss_clust` or `--families immuno`. The existing
+`--input PATH.scc` option selects one arbitrary presentation.
+
+To time every restriction reduction on the 640-point Gaussian torus, including
+the later pruning passes:
+
+```sh
+python3 experiments/benchmark_end_sizes.py --640-only --families torus_gauss --time-steps --output-dir experiments/results/End_sizes_torus_640_timed
+```
+
+`--time-steps` defaults to off. When enabled, `restrictions.csv` has an additional
+`seconds` column for each I/K pass's restriction selection, including zero-retained
+passes. These times measure restriction and independence reduction, excluding
+the subsequent submodule updates. `timings.csv` already records the main stages
+(End spaces, quotient, coordinate setup, combined left/right generator selection),
+total restriction-selection times, and full I/K phase times. Restriction-selection
+times are included in the phase times; do not add them again. The worker accepts
+the same `--time-steps` flag. Existing stage timers remain enabled in the benchmark.
+
+The End-size benchmark uses the explicit quotient route. Its `Quotient seconds`
+column measures normalization of the shifted End_0 image and quotient reduction;
+it excludes the separately timed End_0 and End_(2 epsilon) computations. For a
+comparison with the direct single-solve Q routine on the same 640-point torus,
+run the existing paired benchmark:
+
+```sh
+cmake --build build/local-release --target end_quotient_benchmark -j 2
+python3 experiments/benchmark_end_quotient.py --sizes 640 --families torus_gauss --repeats 1 --output-dir experiments/results/end_quotient_torus_640_comparison
+```
+
+This records both methods in `results.csv`, using a fresh process for each.
+`explicit_seconds` includes End_0, shifted End and quotient formation;
+`explicit_with_E_seconds` excludes End_0, which is useful when E is already
+available for module actions. `end_d_0_seconds` measures the direct Q computation
+without an End_0 basis. Dimensions must agree before speedups are reported.
+
+For curves on the three **320-point** examples, sweep epsilon from **0% to 5%**
+inclusive in **0.1%** steps (51 measurements per input):
+
+```sh
+python experiments/end_quotient_curve.py
+```
+
+Use a Python environment with Matplotlib installed (`python` in the local
+Anaconda environment already has it). This saves all 153 measurements to
+`experiments/results/end_quotient_curve/results.csv` and opens one figure with
+Gaussian torus, clusters and immuno panels. Each panel shows
+`dim End_(2 epsilon)` and `dim Q`, with `Q=End_(2 epsilon)/(eta End_0)`.
+Save the figure manually using the Matplotlib toolbar; no plot file is written.
+The inputs and per-axis percentage convention match the End quotient size
+experiment. `End_0_dimension` and actual epsilon coordinates are also in the CSV;
+settings, raw observations and worker logs are archived per run. The CSV is
+updated after every measurement; failed or pending dimensions stay blank and
+appear as gaps in the plot. To compute without a window or reopen the CSV later:
+
+```sh
+python experiments/end_quotient_curve.py --no-plot
+python experiments/end_quotient_curve.py --plot-only
+```
+
+For the same sweep on the three **640-point** examples:
+
+```sh
+python experiments/end_quotient_curve.py --points 640
+python experiments/end_quotient_curve.py --points 640 --plot-only
+```
+
+The 640-point CSV and archived logs are saved separately under
+`experiments/results/end_quotient_curve_640/`. The figure uses the same titles
+and legend, with no y-axis label.
+
+Compare the explicit quotient computation with the new single-solve `End_d_0`
+routine on the precomputed Gaussian torus H1, clusters H0 and immune H1 inputs:
+
+```sh
+cmake -S . -B build/local-release -DCMAKE_BUILD_TYPE=Release
+cmake --build build/local-release --target end_quotient_benchmark -j 2
+python3 experiments/benchmark_end_quotient.py
+```
+
+The default sweep doubles target sizes from 20 through 2560 and uses 0.5%, 1%
+and 2% epsilon. For a shorter comparison, add `--sizes 80 160 320`,
+`--families torus_gauss immuno`, or `--percentages 1`. Inputs are synthetic
+sample 1 (RNG seed 42) and complete observed clouds; actual point counts are
+recorded separately. No inputs are regenerated.
+
+Each method runs in a fresh process with A-1/2. The explicit route computes
+End_0 and then calls the supplied-E overload; the new route calls
+`End_d_0_coefficients(eta, algorithm)` without an E basis. Internal times exclude
+loading, sorting, initial row caches and shift setup. `speedup_explicit_over_new`
+is explicit total time divided by new time; values above one favor the new
+routine. `speedup_with_E_over_new` compares the explicit time after End_0 is
+available against new time. The latter is useful when E is already needed for
+composition. Both ratios are left blank on a failure or dimension mismatch.
+
+Results are saved after each completed pair to
+`experiments/results/end_quotient_comparison/results.csv`; timestamps archive
+settings, hashes, raw repetitions and process logs. The script checks shifted
+Hom, quotient and shift-image dimensions. It reports medians of three paired
+runs, alternating method order; a first pair with either timing over five seconds
+is used alone. Defaults are 600 seconds and 12288 MiB per process, configurable
+with `--timeout` and `--memory-limit-mb`. Interrupting preserves completed pairs.
+Run the small regression check with
+`python3 -m experiments.support.check_end_quotient_benchmark`.
+
+Generation reuses matching presentations. Pass `--immune-repo PATH` to the
+generator if the immune checkout is elsewhere. Benchmark sizes, epsilon values,
+repeats and limits are defined at the top of the benchmark scripts; `--help`
+lists available command-line overrides.
+
+Results are under `experiments/results/`:
+
+- `runtime/`: `table.csv` and `table.tex`.
+- `optimizations/`: `table.*`, `speedups.*` and generator-budget `generators.*`.
+- `End_sizes/`: `results.csv` and `results.tex`, plus separate `timings.csv` and
+  per-pass `restrictions.csv`, with an archive for each run.
+- `end_quotient_size/`: `results_320.csv`, `results_640.csv`, `results_1280.csv`
+  and matching `.tex` files; `results.tex` contains all three tables. Each has
+  three dimension rows and nine data columns (torus, clusters, immuno, each
+  at 0.5%, 1% and 2%). Settings, raw observations and logs are archived per run.
+- `end_quotient_curve/`: `results.csv`, with 51 epsilon values per 320-point
+  input, plus an archive for each run. Plots open interactively and are not saved.
+- `end_quotient_curve_640/`: the same sweep and CSV layout for 640-point inputs.
+
+Raw observations and settings are saved alongside the tables. Runtime and
+optimization runs resume matching interrupted runs; changed inputs, binaries or
+settings preserve earlier results in separate directories. The size experiment
+starts a new archived run on every invocation.
+
+## What is measured
+
+All experiments use Hom Algorithm A-1/2. Epsilon scales each bounding-box side over generator and relation degrees
+separately: `epsilon = (P/100 * Lx, P/100 * Ly)`. Raw epsilon and shift values
+are vectors. Results from the previous largest-side convention remain in their
+existing files; rerun an experiment to measure the new convention.
+
+- **Runtime:** pruning with all optimizations, over synthetic point counts
+  20, 40, 80, 160, 320, 640, 1280 and 2560, plus both complete large hypoxic
+  regions; epsilon values are 1%, 2%, 4% and 8%.
+- **Optimizations:** the quotient-based baseline versus each optional improvement
+  separately and a Full End control. The **Direct Q** column measures the
+  single-solve `End_d_0` routine against a baseline computing End_0 and the
+  shifted Hom separately. The baseline and other individual variants use
+  `--no-single-solve-quotient`; normal runs and the all-optimizations runtime
+  experiment keep it enabled. This remains `single-solve-quotient` in CSV fields
+  and command-line options. With composition enabled, End_0 is computed separately
+  for the actions in the direct route and retained in the old route; the timed
+  pruning includes that cost. **Fast I** enables `--update-i-target`:
+  recompute the shift image of the current I before each map. Base and the other
+  individual variants keep this image fixed for the whole pass
+  (`--no-update-i-target`). Both modes use the same K loop. With adaptive
+  restriction enabled, map selection still uses I at the start of each pass;
+  target reductions are refreshed whenever the target changes. The runtime
+  experiment enables fast I along with the other optimizations.
+  Inputs are Gaussian-noise tori, Gaussian
+  clusters and immune samples near 160, 320 and 640 points, at 0.5%, 1% and 2% epsilon.
+  A separate generator-budget comparison combines Nilpotent reduction and
+  Complement-orbit with 12 and 24 orbit attempts and hybrid seeds.
+- **End sizes:** exactly seven point sets, independent of the optimization
+  selection: Gaussian-noise tori, immune samples and Gaussian clusters at
+  target sizes **640 and 1280**, plus complete **LargeHypoxicRegion H1**.
+  Synthetic inputs use sample 1 (RNG seed 42). The 1280-target immune cloud
+  has 1281 actual cells; it remains complete. Epsilon values are 0.5%, 1% and 2%,
+  giving 21 rows without seed averaging. The table shows `dim End_0`,
+  `dim End_(2 epsilon)`, `dim Q` for `Q=End_(2 epsilon)/(eta End_0)`, the
+  selected left/right generator counts `|B_l|` and `|B_r|` after both methods,
+  and the maximum retained I/K restriction counts over actual pruning passes.
+  `restrictions.csv` lists every pass, including initial and terminal zeros;
+  timings are separate. The worker reuses its computed quotient and selected
+  families during those loops. End_0 supplies the action on Q; its basis is
+  not replaced by B_l or B_r. The implementation note is
+  `explanations/budgeted_composition_generators.tex` (and its compiled PDF).
+  Nilpotent reduction now first certifies single-row/column quotient maps by
+  elementary lowering factorizations, inserting their known unit coordinates
+  without multiplication or a coordinate solve. Known valid factors are tried
+  first; up to 128 additional candidates per side receive cached relation checks.
+  Quotient coordinates are prepared only when a product or a newly constructed
+  factor's membership check needs them. Both factors must be module maps;
+  a new intermediate factor must also belong to the supplied Hom subspace.
+  When direct certificates fill the nilpotent budget, the small ordinary-seed
+  trials are skipped; Complement-orbit still runs. Successful certificates
+  share the nilpotent-reduction product budget. Set
+  `--composition-certificate-visits 0` to disable this pass for comparisons
+  (default cap: 8192 candidates per side).
+  With ordinary defaults, certificates and sampled lowering products share
+  4096 units per side, and certificates plus all nilpotent-method products
+  share 8192 units. The independent Complement-orbit allowance is unchanged.
+  All three current explanatory notes include the same
+  [production algorithm](../explanations/composition_generators_implementation.tex),
+  covering candidate order, relation checks, rollback and stopping.
+  On the fixed 1280-point torus at 1% of each bounding-box side, the tuned
+  default took a median 0.110985 seconds over three runs, versus 35.986382
+  seconds for the preceding certificate version, including coordinate setup.
+  It kept 89238 maps on each side, versus 89176/89181 previously. Computing
+  E/Q and later pruning are outside those times. Raw measurements are in
+  `results/nilpotent-1280-2026-11-25/`.
+  The production benchmark's `quotient_coordinates` row is now zero; any
+  required coordinate preparation is included in `composition_generators`.
+  The standalone worker's `--compare-methods` mode retains the older separate
+  method and full-space comparisons.
+- **End quotient size:** Gaussian-noise tori (H1), Gaussian clusters (H0) and
+  immune samples (H1) at target sizes **320, 640 and 1280**, using synthetic
+  sample 1 and the complete observed clouds. Epsilon values are 0.5%, 1% and 2%.
+  The worker's `--dimensions-only` mode stops after `dim End_0`,
+  `dim End_(2 epsilon)` and `dim Q`, skipping generator selection and pruning.
+  Each invocation starts a new archived run and updates the three size tables
+  after every measurement; completed dimensions survive a later timeout.
+
+Inputs share `experiments/data/manifest.csv`: noisy tori (H1), Gaussian clusters
+(H0), a noisy 2-sphere (H2) and observed immune clouds (H1). Synthetic RNG seeds
+are 42, 43 and 44; observed clouds are used whole. Presentations use the sublevel
+Delaunay–Čech bifiltration with radius and negative normalized Gaussian KDE.
+Sampling and bandwidth details are in [generate_data.py](generate_data.py).
+
+Runtime and optimization tables report internal pruning time, including Hom
+construction and final minimization, excluding input loading and SCC output.
+Process wall time is recorded separately. Up to three repetitions are summarized
+by their median; a first run over five seconds is used alone. Optimization tables
+average these medians equally across seeds; runtime keeps seeds separate.
+Speedups are `100 * (Base / Variant - 1)`; Quot uses
+`100 * (Full End / Base - 1)`. Each process has a 600-second deadline, except
+LargeHypoxicRegion H1 in the End-size experiment: its deadline is **60 minutes
+per epsilon**, configurable with `--large-timeout` (seconds). The sampled memory
+limit is 12288 MiB. Failures are recorded as statuses, not timings.

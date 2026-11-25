@@ -28,22 +28,20 @@ using namespace graded_linalg;
 // J: I am modularising the pruning function a bit for readability:
 
 graded_linalg::r2degree pruning_shift(double epsilon) {
-    if (!std::isfinite(2 * epsilon) || epsilon < 0 )
-        throw std::invalid_argument("epsilon must be finite and nonnegative");
-    return {2 * epsilon, 2 * epsilon};
+    return pruning_shift(Epsilon{epsilon, epsilon});
 }
 
 // Preserve the existing compiled R2 entry points.
-std::pair<Submodule, Submodule> pruning_pair(const Module& X, double epsilon, bool quick,
+std::pair<Submodule, Submodule> pruning_pair(const Module& X, const Epsilon& epsilon, bool quick,
                                          PruningProfile* profile, const PruningOptions& options) {
   return stable_decomposition::pruning_pair<Mat>(X, epsilon, quick, profile, options);
 }
 
-Module pruning(Module X, double epsilon, bool quick, PruningProfile* profile, const PruningOptions& options) {
+Module pruning(Module X, const Epsilon& epsilon, bool quick, PruningProfile* profile, const PruningOptions& options) {
   return stable_decomposition::pruning<Mat>(std::move(X), epsilon, quick, profile, options);
 }
 
-std::pair<Mat, Mat> pruning_pair(Mat &M, const double epsilon, const bool quick) {
+std::pair<Mat, Mat> pruning_pair(Mat &M, const Epsilon& epsilon, const bool quick) {
   // In this function, matrices either represent presentations of modules (relations -> generators),
   // or generators of a submodule (generators of submodule -> generators of module).
   // Therefore, matrices representing submodules only make sense w.r.t. an ambient module,
@@ -225,7 +223,7 @@ std::pair<Mat, Mat> pruning_pair(Mat &M, const double epsilon, const bool quick)
   return {I, K};
 }
 
-Mat pruning(Mat &M, const double epsilon, bool quick) {
+Mat pruning(Mat &M, const Epsilon& epsilon, bool quick) {
   auto [I, K] = pruning_pair(M, epsilon, quick);         // generators for I ⊆ M and K ⊆ M
   //Mat K_module = K.presentation_of_submodule(M);
   //return K_module;
@@ -234,7 +232,7 @@ Mat pruning(Mat &M, const double epsilon, bool quick) {
   Pru_M.sort_compatibly();
   Pru_M.column_reduction_graded_w_deletion();
   Pru_M.minimize();
-  Pru_M.shift({-epsilon, -epsilon});
+  Pru_M.shift({-epsilon[0], -epsilon[1]});
   return Pru_M;
 }
 
@@ -243,4 +241,20 @@ Mat pruning(Mat &M, const double epsilon, bool quick) {
 
 
 
+} // namespace stable_decomposition
+
+namespace stable_decomposition {
+std::pair<Submodule, Submodule> pruning_pair(const Module& X, double epsilon, bool quick,
+        PruningProfile* profile, const PruningOptions& options) {
+    return pruning_pair(X, Epsilon{epsilon, epsilon}, quick, profile, options);
+}
+Module pruning(Module X, double epsilon, bool quick, PruningProfile* profile, const PruningOptions& options) {
+    return pruning(std::move(X), Epsilon{epsilon, epsilon}, quick, profile, options);
+}
+std::pair<Mat, Mat> pruning_pair(Mat& M, double epsilon, bool quick) {
+    return pruning_pair(M, Epsilon{epsilon, epsilon}, quick);
+}
+Mat pruning(Mat& M, double epsilon, bool quick) {
+    return pruning(M, Epsilon{epsilon, epsilon}, quick);
+}
 } // namespace stable_decomposition

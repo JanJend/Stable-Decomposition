@@ -100,8 +100,8 @@ if(split EQUAL -1)
 endif()
 string(SUBSTRING "${stdout}" 0 ${split} matrix_progress)
 string(SUBSTRING "${stdout}" ${split} -1 module_progress)
-if(NOT matrix_progress MATCHES "Iteration 1" OR NOT module_progress MATCHES "Iteration 1")
-    message(FATAL_ERROR "Missing progress bars in comparison: ${stdout}")
+if(NOT matrix_progress MATCHES "Iteration 1" OR NOT module_progress MATCHES "[0-9]+ iterations for I, [0-9]+ iterations for K")
+    message(FATAL_ERROR "Missing matrix progress or module iteration summary: ${stdout}")
 endif()
 foreach(unwanted "matrix: [" "module: [" "quick=false" "Times are wall time" "Saved decompositions:")
     string(FIND "${stdout}" "${unwanted}" position)
@@ -127,6 +127,13 @@ if(EXISTS "${work}/comparison.scc")
 endif()
 
 # Exercise the empty case and the multiplicity cutoff on minimized outputs.
+execute_process(COMMAND "${PRUNING}" "${input}" -e 0.5 --all-optimizations --parallel-i --parallel-k
+    --threads 4 --profile --no-output
+    RESULT_VARIABLE result OUTPUT_VARIABLE stdout ERROR_VARIABLE stderr TIMEOUT 30)
+if(NOT result EQUAL 0 OR NOT stdout MATCHES "update_i_target=0 minimize_i_target=0 parallel_i=1 parallel_k=1")
+    message(FATAL_ERROR "Parallel fixed-target I CLI failed: ${stdout}\n${stderr}")
+endif()
+
 foreach(k 0 2 4 5)
     string(REPEAT "0 0 ;\n" ${k} generators)
     file(WRITE "${work}/multiplicity-${k}.scc" "scc2020\n2\n0 ${k} 0\n${generators}")

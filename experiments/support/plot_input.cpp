@@ -11,8 +11,8 @@ int main(int argc, char** argv) {
     std::ostream report(std::cout.rdbuf());
     std::cout.rdbuf(std::cerr.rdbuf());
     try {
-        if (argc != 4)
-            throw std::invalid_argument("Usage: plot_input INPUT OUTPUT_PNG TITLE");
+        if (argc != 3 && argc != 5)
+            throw std::invalid_argument("Usage: plot_input INPUT OUTPUT_PNG [X_LABEL Y_LABEL]");
         const auto start = std::chrono::steady_clock::now();
         stable_decomposition::Module input(argv[1], true);
         const auto degrees = graded_linalg::support_degrees(input);
@@ -35,7 +35,8 @@ int main(int argc, char** argv) {
             maximum = std::max(maximum, value);
         }
         const auto png = graded_linalg::image_detail::heatmap_image(
-            xs, ys, values, argv[3], "Dimension", true, 1, maximum);
+            xs, ys, values, "", "Dimension", true, 1, maximum, graded_linalg::ColourMap::blue,
+            argc == 5 ? argv[3] : "", argc == 5 ? argv[4] : "");
         const std::filesystem::path output(argv[2]);
         std::filesystem::create_directories(output.parent_path());
         graded_linalg::save_png(png, output.string());

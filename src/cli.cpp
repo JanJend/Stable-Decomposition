@@ -152,7 +152,7 @@ void compare_decompositions(const Module& input, const Module& output, const fs:
 }
 #endif
 
-Module compare_pruning(const Module& input, double epsilon, const fs::path& prefix) {
+Module compare_pruning(const Module& input, const Epsilon& epsilon, const fs::path& prefix) {
     // Prepare independent copies of the same presentation before timing either run.
     Mat old_input = input.presentation();
     Module new_input(input.presentation());

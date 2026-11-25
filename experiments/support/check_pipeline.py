@@ -21,6 +21,9 @@ def check(worker):
         assert metrics["components"] == 1, metrics
         assert metrics["short_epsilon"] == [0, 0, 1], metrics
         assert metrics["short_2epsilon"] == [0, 1, 1], metrics
+        metrics, status, _, error = run_worker(worker, ["components", interval, "0.05,1", "0.5,5"], 30)
+        assert status == "ok", error
+        assert metrics["short_epsilon"] == [0, 0] and metrics["short_2epsilon"] == [0, 1], metrics
         metrics, status, _, error = run_worker(worker, ["inspect", interval], 30)
         assert status == "ok" and metrics["thickness"] == 1, (metrics, error)
         output = directory / "pruned.scc"

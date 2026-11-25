@@ -20,7 +20,9 @@ int main(int argc, char** argv) {
         // Read the input module and choose the pruning scale.
         Module input(options.input_file);
         input.sort_compatibly();
-        const double epsilon = get_epsilon(options.epsilon, input.presentation());
+        auto explicit_epsilon = options.epsilon_vector;
+        if (options.epsilon) explicit_epsilon = Epsilon{*options.epsilon, *options.epsilon};
+        const auto epsilon = get_epsilon(explicit_epsilon, input.presentation(), options.epsilon_percent.value_or(1));
 
         // Optional images and decompositions share the output file's directory and stem.
         const fs::path output_path = options.output_file.empty()
@@ -32,7 +34,7 @@ int main(int argc, char** argv) {
         if ((!options.no_output || options.hilbert || options.aida) && !output_path.parent_path().empty())
             fs::create_directories(output_path.parent_path());
 
-        std::cout << "Computing pruning of " << options.input_file << " (epsilon=" << epsilon << ")\n";
+        std::cout << "Computing pruning of " << options.input_file << " (epsilon=" << format_epsilon(epsilon) << ")\n";
         Module output;
         if (options.compare) {
             output = compare_pruning(input, epsilon, output_prefix);

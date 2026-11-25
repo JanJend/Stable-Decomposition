@@ -5,22 +5,49 @@
 #include "utils.hpp"
 #include <limits>
 
-TEST_CASE("epsilon uses all presentation degrees and explicit override") {
+TEST_CASE("epsilon percentages use each side and all presentation degrees") {
     using namespace stable_decomposition;
     Mat empty(0, 0, {}, {}, {});
     CHECK_FALSE(calculate_epsilon_from_matrix(empty).has_value());
-    CHECK(get_epsilon(std::nullopt, empty) == doctest::Approx(0.01));
+    CHECK(get_epsilon(std::nullopt, empty) == Epsilon{0, 0});
     Mat point(0, 2, {}, {}, {{3,4}, {3,4}});
-    CHECK_FALSE(calculate_epsilon_from_matrix(point).has_value());
+    CHECK(calculate_epsilon_from_matrix(point).value() == Epsilon{0, 0});
     Mat free(0, 2, {}, {}, {{-2,1}, {8,4}});
-    CHECK(calculate_epsilon_from_matrix(free).value() == doctest::Approx(0.1));
+    CHECK(calculate_epsilon_from_matrix(free).value() == Epsilon{0.1, 0.03});
     Mat presentation(1, 1, {{0}}, {{2,20}}, {{-3,0}});
-    CHECK(calculate_epsilon_from_matrix(presentation).value() == doctest::Approx(0.2));
-    CHECK(get_epsilon(std::nullopt, presentation) == doctest::Approx(0.2));
-    CHECK(get_epsilon(0.7, presentation) == doctest::Approx(0.7));
-    CHECK(get_epsilon(0.0, presentation) == 0.0);
-    Mat cols_only(1, 0, {{}}, {{3,4}}, {});
-    CHECK_FALSE(calculate_epsilon_from_matrix(cols_only).has_value());
+    CHECK(calculate_epsilon_from_matrix(presentation).value() == Epsilon{0.05, 0.2});
+    CHECK(get_epsilon(std::nullopt, presentation, 2) == Epsilon{0.1, 0.4});
+    CHECK(get_epsilon(Epsilon{0.7, 0.2}, presentation) == Epsilon{0.7, 0.2});
+    CHECK(epsilon_from_percent(presentation, 0) == Epsilon{0, 0});
+    Mat flat(0, 2, {}, {}, {{-5,4}, {95,4}});
+    CHECK(epsilon_from_percent(flat, 1) == Epsilon{1, 0});
+    Mat cols_only(2, 0, {{}, {}}, {{-1,4}, {1,8}}, {});
+    CHECK(calculate_epsilon_from_matrix(cols_only).value() == Epsilon{0.02, 0.04});
+    for (double invalid : {-1., std::numeric_limits<double>::infinity(),
+                           std::numeric_limits<double>::quiet_NaN()})
+        CHECK_THROWS_AS(epsilon_from_percent(flat, invalid), std::invalid_argument);
+}
+
+TEST_CASE("anisotropic pruning agrees with rescaling coordinates") {
+    using namespace stable_decomposition;
+    // Stretch y by 10: epsilon (0.5, 5) must behave like (0.5, 0.5) before stretching.
+    const Mat input(0, 2, {}, {}, {{0,0}, {1,10}});
+    const Mat normal(0, 2, {}, {}, {{0,0}, {1,1}});
+    const auto expected = pruning(Module(normal), 0.5);
+    const Epsilon epsilon{0.5, 5};
+    CHECK(pruning_shift(epsilon) == Epsilon{1, 10});
+    for (bool quick : {false, true}) {
+        Mat old_input = input, profiled_input = input;
+        const auto old = pruning(old_input, epsilon, quick);
+        PruningProfile profile;
+        const auto measured = pruning_profiled(profiled_input, epsilon, quick, &profile);
+        for (const auto& result : {Module(old), Module(measured), pruning(Module(input), epsilon, quick)}) {
+            CHECK(result.presentation().row_degrees == graded_linalg::vec<Epsilon>{{1.5,15}, {1.5,15}});
+            for (double x : {0., 0.5, 1., 1.5, 2.})
+                for (double y : {0., 0.5, 1., 1.5, 2.})
+                    CHECK(result.dimension_at({x, 10*y}) == expected.dimension_at({x, y}));
+        }
+    }
 }
 
 TEST_CASE("epsilon controls the doubled iteration shift and final half shift") {
@@ -58,12 +85,13 @@ TEST_CASE("epsilon validation and historical extractor aliases") {
                          std::numeric_limits<double>::quiet_NaN(),
                          std::numeric_limits<double>::max()}) {
         CHECK_THROWS_AS(pruning_shift(value), std::invalid_argument);
-        CHECK_THROWS_AS(get_epsilon(value, free), std::invalid_argument);
+        CHECK_THROWS_AS(get_epsilon(Epsilon{0, value}, free), std::invalid_argument);
         CHECK_THROWS_AS(pruning_pair(free, value), std::invalid_argument);
     }
-    CHECK(get_delta(0.25, free) == get_epsilon(0.25, free));
+    CHECK(get_delta(Epsilon{0.25, 0.5}, free) == get_epsilon(Epsilon{0.25, 0.5}, free));
     CHECK(calculate_delta_from_matrix(free) == calculate_epsilon_from_matrix(free));
     CHECK(generate_output_path("dir/input.scc", 0.25) == "dir/input_pru0.2500.scc");
+    CHECK(generate_output_path("dir/input.scc", Epsilon{0.25, 0.5}) == "dir/input_pru0.2500_0.5000.scc");
 }
 
 TEST_CASE("CLI stores epsilon with a historical delta spelling") {
@@ -73,6 +101,15 @@ TEST_CASE("CLI stores epsilon with a historical delta spelling") {
         return parse_arguments(static_cast<int>(argv.size()), argv.data());
     };
     CHECK_FALSE(parse({"pruning", "input.scc"}).epsilon.has_value());
+    CHECK(parse({"pruning", "input.scc", "--epsilon-percent", "2"}).epsilon_percent.value() == 2);
+    CHECK(parse({"pruning", "--epsilon-vector", "0.1", "0.2", "input.scc"}).epsilon_vector.value()
+          == stable_decomposition::Epsilon{0.1, 0.2});
+    CHECK_THROWS(parse({"pruning", "input.scc", "--epsilon-vector", "0.1"}));
+    CHECK_THROWS(parse({"pruning", "input.scc", "--epsilon-vector", "0.1", "0.2", "0.3"}));
+    CHECK_THROWS(parse({"pruning", "input.scc", "--epsilon-vector", "0.1", "-1"}));
+    CHECK_THROWS(parse({"pruning", "input.scc", "--epsilon-percent", "-1"}));
+    CHECK_THROWS(parse({"pruning", "input.scc", "--epsilon-percent", "1", "--epsilon", "0.2"}));
+    CHECK_THROWS(parse({"pruning", "input.scc", "--epsilon-percent", "1", "--epsilon-vector", "0.1", "0.2"}));
     CHECK(parse({"pruning", "input.scc", "--epsilon", "0.125"}).epsilon.value() == 0.125);
     CHECK(parse({"pruning", "input.scc", "--delta", "0.125"}).epsilon.value() == 0.125);
     CHECK_THROWS(parse({"pruning", "input.scc", "--epsilon"}));
@@ -91,18 +128,23 @@ TEST_CASE("CLI stores epsilon with a historical delta spelling") {
     CHECK_THROWS(parse({"pruning", "input.scc", "--quick"}));
     using graded_linalg::HomAlgorithm;
     const auto defaults = parse({"pruning", "input.scc"}).pruning_options;
+    CHECK(defaults.threads >= 1);
+    if (std::thread::hardware_concurrency() > 1) CHECK(defaults.threads > 1);
+    CHECK(parse({"pruning", "input.scc", "--threads", "1"}).pruning_options.threads == 1);
+    CHECK(parse({"pruning", "input.scc", "--threads", "3"}).pruning_options.threads == 3);
     CHECK(defaults.hom_algorithm == HomAlgorithm::optimised);
     CHECK(defaults.projected_preimages);
     CHECK_FALSE(defaults.full_end_space);
     CHECK(defaults.composition_generators);
-    CHECK(defaults.composition_budget.sparse_nilpotent);
+    CHECK(defaults.composition_budget.nilpotent_reduction);
     CHECK(defaults.composition_budget.complement_orbit);
     CHECK(defaults.composition_budget.orbit_rounds == 12);
     CHECK(defaults.composition_budget.orbit_seed_mode == "hybrid");
     const auto tuned = parse({"pruning", "input.scc", "--composition-orbit-rounds", "6",
         "--composition-orbit-seed-mode=random", "--composition-orbit-min-gain", "10",
         "--composition-orbit-patience", "2", "--composition-orbit-random-seed", "42",
-        "--composition-sparse-seeds", "32", "--composition-nilpotent-rounds", "16",
+        "--composition-nilpotent-seeds", "32", "--composition-nilpotent-rounds", "16",
+        "--composition-certificate-visits", "128",
         "--all-optimizations"}).pruning_options;
     CHECK(tuned.composition_budget.orbit_rounds == 6);
     CHECK(tuned.composition_budget.orbit_seed_mode == "random");
@@ -111,30 +153,46 @@ TEST_CASE("CLI stores epsilon with a historical delta spelling") {
     CHECK(tuned.composition_budget.orbit_random_seed == 42);
     CHECK(tuned.composition_budget.max_seeds == 32);
     CHECK(tuned.composition_budget.nilpotent_rounds == 16);
-    CHECK(tuned.composition_budget.sparse_nilpotent);
+    CHECK(tuned.composition_budget.max_certificate_visits == 128);
+    CHECK(parse({"pruning", "input.scc", "--composition-certificate-visits=0"})
+              .pruning_options.composition_budget.max_certificate_visits == 0);
+    CHECK(tuned.composition_budget.nilpotent_reduction);
     CHECK(tuned.composition_budget.complement_orbit);
     for (const auto* value : {"-1", "1.5", "18446744073709551616", "abc"})
         CHECK_THROWS(parse({"pruning", "input.scc", "--composition-orbit-rounds", value}));
     CHECK_THROWS(parse({"pruning", "input.scc", "--composition-orbit-seed-mode=invalid"}));
-    const auto sparse_only = parse({"pruning", "input.scc", "--no-complement-orbit-generators"}).pruning_options;
-    CHECK(sparse_only.composition_budget.sparse_nilpotent);
-    CHECK_FALSE(sparse_only.composition_budget.complement_orbit);
-    const auto orbit_only = parse({"pruning", "input.scc", "--no-sparse-nilpotent-generators"}).pruning_options;
-    CHECK_FALSE(orbit_only.composition_budget.sparse_nilpotent);
+    const auto nilpotent_only = parse({"pruning", "input.scc", "--no-complement-orbit-generators"}).pruning_options;
+    CHECK(nilpotent_only.composition_budget.nilpotent_reduction);
+    CHECK_FALSE(nilpotent_only.composition_budget.complement_orbit);
+    const auto orbit_only = parse({"pruning", "input.scc", "--no-nilpotent-reduction"}).pruning_options;
+    CHECK_FALSE(orbit_only.composition_budget.nilpotent_reduction);
     CHECK(orbit_only.composition_budget.complement_orbit);
-    CHECK_FALSE(parse({"pruning", "input.scc", "--no-sparse-nilpotent-generators",
+    CHECK_FALSE(parse({"pruning", "input.scc", "--no-nilpotent-reduction",
                        "--no-complement-orbit-generators"}).pruning_options.composition_enabled());
     CHECK(defaults.amortize_reductions);
     CHECK(defaults.adaptive_restriction);
     CHECK(defaults.reuse_target_reductions);
+    CHECK(defaults.single_solve_quotient);
+    CHECK_FALSE(defaults.update_i_target);
+    CHECK(parse({"pruning", "input.scc", "--update-i-target"}).pruning_options.update_i_target);
+    CHECK_FALSE(parse({"pruning", "input.scc", "--no-update-i-target"}).pruning_options.update_i_target);
+    CHECK(parse({"pruning", "input.scc", "--no-update-i-target", "--all-optimizations"})
+              .pruning_options.update_i_target);
+    CHECK_THROWS(parse({"pruning", "input.scc", "--old", "--update-i-target"}));
+    CHECK_THROWS(parse({"pruning", "input.scc", "--compare", "--update-i-target"}));
+    CHECK(parse({"pruning", "input.scc", "--single-solve-quotient"}).pruning_options.single_solve_quotient);
+    CHECK(parse({"pruning", "input.scc", "--no-single-solve-quotient", "--all-optimizations"})
+              .pruning_options.single_solve_quotient);
     const auto disabled = parse({"pruning", "input.scc", "--no-projected-preimages",
-        "--no-composition-generators", "--no-amortize-reductions", "--no-adaptive-restriction", "--no-reuse-target-reductions"}).pruning_options;
+        "--no-composition-generators", "--no-amortize-reductions", "--no-adaptive-restriction",
+        "--no-reuse-target-reductions", "--no-single-solve-quotient"}).pruning_options;
     CHECK_FALSE(disabled.projected_preimages);
     CHECK_FALSE(disabled.full_end_space);
     CHECK_FALSE(disabled.composition_generators);
     CHECK_FALSE(disabled.amortize_reductions);
     CHECK_FALSE(disabled.adaptive_restriction);
     CHECK_FALSE(disabled.reuse_target_reductions);
+    CHECK_FALSE(disabled.single_solve_quotient);
     CHECK(disabled.hom_algorithm == HomAlgorithm::optimised);
     for (const auto* removed : {"--dense-kernel-pivots", "--no-dense-kernel-pivots", "--fuse-i-preimage", "--no-fuse-i-preimage", "--defer-k-image-minimization",
                               "--no-defer-k-image-minimization", "--throttle-progress", "--no-throttle-progress"})
@@ -181,7 +239,7 @@ TEST_CASE("pruning profiles count actual passes and operations without changing 
             CHECK(p->k_equal.calls == k_passes);
             // Q=0 computes ker(eta) directly, outside the iteration loops.
             CHECK(p->k_preimage.calls == 1);
-            CHECK(p->total.seconds >= p->i_phase.seconds + p->k_phase.seconds);
+            CHECK(p->total.seconds >= std::max(p->i_phase.seconds, p->k_phase.seconds));
         }
         // The single additional map is redundant in the second I pass;
         // default adaptive restriction skips that preimage in module pruning.

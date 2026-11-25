@@ -116,3 +116,17 @@ TEST_CASE("grid pruning retains the scalar and index template choices") {
     CHECK(grid.values[0][0] == 0);
     CHECK(grid.values[1][0] == 2);
 }
+
+TEST_CASE("grid and CSC pruning retain unequal epsilon components") {
+    const sd::Mat input(0, 2, {}, {}, {{0,0}, {1,10}});
+    using Grid = GridGradedSparseMatrix<double, 2, int>;
+    using Packed = R2GradedSparseMatrix<int, CSCStorage<int>>;
+    const sd::Epsilon epsilon{0.5, 5};
+    const auto grid = sd::pruning(Module<Grid>(Grid(input)), epsilon);
+    const auto packed = sd::pruning(Module<Packed>(sd::convert_matrix_storage<CSCStorage<int>>(input)), epsilon);
+    CHECK(grid.presentation().real_row_degrees() == vec<sd::Epsilon>{{1.5,15}, {1.5,15}});
+    CHECK(packed.presentation().row_degrees == vec<sd::Epsilon>{{1.5,15}, {1.5,15}});
+    // Zero-length coordinates must stay fixed.
+    const auto flat = sd::pruning(sd::Module(sd::Mat(0, 2, {}, {}, {{0,4}, {1,4}})), sd::Epsilon{0.5, 0});
+    CHECK(flat.presentation().row_degrees == vec<sd::Epsilon>{{1.5,4}, {1.5,4}});
+}
